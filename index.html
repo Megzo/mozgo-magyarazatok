@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mozgó magyarázatok — öt tantárgy</title>
+<link rel="stylesheet" href="shared/lesson.css">
+<style>
+  html, body { height: 100%; overflow: hidden; background: #0a0b10; }
+  body { display: flex; flex-direction: column; color: #f3efe6; font-family: "Bricolage Grotesque", sans-serif; }
+  header { flex: none; display: flex; align-items: flex-end; justify-content: space-between; gap: 4vw; padding: 3.4vh 3vw 2.6vh; }
+  h1 { margin: 0; font-family: "Fraunces", serif; font-weight: 520; font-size: clamp(30px, 4.6vh, 62px); line-height: 1; letter-spacing: -.02em; font-variation-settings: "opsz" 144; }
+  h1 em { font-style: italic; font-weight: 400; color: #ffb454; }
+  header p { margin: 0; max-width: 34em; font-size: clamp(14px, 1.9vh, 21px); line-height: 1.4; color: #a9a59b; text-align: right; }
+  main { flex: 1; min-height: 0; display: flex; gap: 10px; padding: 0 3vw 3vh; }
+  a.card {
+    position: relative; flex: 1 1 0; min-width: 0; border-radius: 22px; overflow: hidden; text-decoration: none; color: var(--ink);
+    background: var(--bg); display: flex; flex-direction: column; justify-content: space-between; padding: 3vh 1.7vw 2.8vh;
+    transition: flex-grow .55s cubic-bezier(.2, .8, .2, 1), transform .3s; isolation: isolate;
+    animation: rise .9s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i) * 90ms);
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+  a.card:hover, a.card:focus-visible { flex-grow: 1.7; outline: none; }
+  a.card canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+  .num { font-family: "JetBrains Mono", monospace; font-size: clamp(12px, 1.6vh, 17px); letter-spacing: .14em; opacity: .7; }
+  .subj { display: inline-block; margin-top: 1.2vh; font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: clamp(12px, 1.6vh, 17px); letter-spacing: .14em; text-transform: uppercase;
+    background: var(--accent); color: var(--accent-ink); padding: .45em 1em .4em; border-radius: 99px; }
+  .card h2 { margin: 1.6vh 0 0; font-family: "Fraunces", serif; font-weight: 540; font-size: clamp(22px, 3.5vh, 44px); line-height: 1.05; letter-spacing: -.015em; text-wrap: balance; max-width: 9.5em; hyphens: manual; overflow-wrap: break-word; }
+  .foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .foot p { margin: 0; font-size: clamp(13px, 1.75vh, 19px); line-height: 1.35; max-width: 17em; opacity: .82; }
+  .go { flex: none; width: clamp(40px, 5.4vh, 60px); aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-size: clamp(18px, 2.6vh, 28px); transition: transform .3s; }
+  a.card:hover .go { transform: translateX(6px) rotate(-12deg); }
+  .c1 { --bg: #ecdfc3; --ink: #3b2716; --accent: #a3271c; --accent-ink: #fbf2dc; }
+  .c2 { --bg: #05070d; --ink: #eef3ff; --accent: #ffb23e; --accent-ink: #1c1000; }
+  .c3 { --bg: #07132a; --ink: #eaf1ff; --accent: #ff7a48; --accent-ink: #1d0a02; }
+  .c4 { --bg: #f4efe2; --ink: #17223b; --accent: #e2452b; --accent-ink: #fff6ec; }
+  .c5 { --bg: #050805; --ink: #ecffe6; --accent: #b6f23c; --accent-ink: #0b1400; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mozgó <em>magyarázatok</em></h1>
+  <p>Öt tantárgy, öt téma – lépésről lépésre, animálva. Kattints egy kártyára; a leckékben a <b>← →</b> billentyűkkel léptethetsz.</p>
+</header>
+<main>
+  <a class="card c1" style="--i:0" href="tortenelem-vandorlas.html"><canvas data-k="hist"></canvas>
+    <div><div class="num">01</div><span class="subj">Történelem</span><h2>A magyarok vándorlása</h2></div>
+    <div class="foot"><p>Az Urál vidékétől a Kárpát-medencéig: őshaza, Levédia, Etelköz, honfoglalás.</p><span class="go">→</span></div></a>
+  <a class="card c2" style="--i:1" href="kemia-maghasadas.html"><canvas data-k="chem"></canvas>
+    <div><div class="num">02</div><span class="subj">Kémia</span><h2>A maghasadás</h2></div>
+    <div class="foot"><p>Egy neutron, egy uránmag – és a láncreakció, amelyet a reaktor kordában tart.</p><span class="go">→</span></div></a>
+  <a class="card c3" style="--i:2" href="fizika-hutes.html"><canvas data-k="phys"></canvas>
+    <div><div class="num">03</div><span class="subj">Fizika</span><h2>A kompresszoros hűtés</h2></div>
+    <div class="foot"><p>Hogyan hord ki a hűtő hőt a hidegből a melegbe? Párolgás, nyomás, körfolyamat.</p><span class="go">→</span></div></a>
+  <a class="card c4" style="--i:3" href="matek-kor-pi.html"><canvas data-k="math"></canvas>
+    <div><div class="num">04</div><span class="subj">Matematika</span><h2>A kör területe és a π</h2></div>
+    <div class="foot"><p>Guruló kerék, pizzaszeletek, hagymakarikák: miért éppen πr²?</p><span class="go">→</span></div></a>
+  <a class="card c5" style="--i:4" href="informatika-mnist.html"><canvas data-k="info"></canvas>
+    <div><div class="num">05</div><span class="subj">Informatika</span><h2>Számjegy&shy;felismerés neurális hálóval</h2></div>
+    <div class="foot"><p>MNIST: hogyan tanul meg egy gép kézírást olvasni? Rajzolj, és próbáld ki.</p><span class="go">→</span></div></a>
+</main>
+<script>
+(function () {
+  'use strict';
+  const TAU = Math.PI * 2, cl = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v)), lerp = (a, b, t) => a + (b - a) * t, sm = (t) => { t = cl(t); return t * t * (3 - 2 * t); };
+  const cvs = [...document.querySelectorAll('canvas')].map((el) => ({ el, c: el.getContext('2d'), k: el.dataset.k, w: 0, h: 0 }));
+  function fit() { const d = Math.min(2, devicePixelRatio || 1); for (const v of cvs) { const r = el(v).getBoundingClientRect(); v.w = r.width; v.h = r.height; v.el.width = Math.round(r.width * d); v.el.height = Math.round(r.height * d); v.d = d; } }
+  function el(v) { return v.el; }
+  const DIG = ['01110100011000110001100011000101110', '00100011000010000100001000010001110', '01110100010000100110010001000011111', '11110000010000101110000010000111110', '00010001100101010010111110001000010', '11111100001111000001000011000101110', '01110100001000011110100011000101110', '11111000010001000100010000100001000', '01110100011000101110100011000101110', '01110100011000101111000010000101110'];
+  const nuc = Array.from({ length: 46 }, (_, i) => { const a = i * 2.39996, r = Math.sqrt((i + .5) / 46); return { x: Math.cos(a) * r, y: Math.sin(a) * r, p: i % 5 < 2, s: i % 2 ? 1 : -1 }; });
+  const draw = {
+    hist(c, w, h, t) {
+      const u = Math.min(w, h * .6), cx = w / 2, cy = h * .56;
+      c.strokeStyle = 'rgba(90,59,34,.16)'; c.lineWidth = 1; for (let i = 0; i < 7; i++) { c.beginPath(); c.arc(cx + u * .5, cy - u * .5, u * (.25 + i * .17), 0, TAU); c.stroke(); }
+      const P = (f) => { const m = 1 - f; return [cx + u * (.42 * m * m * m + .2 * 3 * m * m * f - .1 * 3 * m * f * f - .4 * f * f * f), cy + u * (-.42 * m * m * m - .05 * 3 * m * m * f - .1 * 3 * m * f * f + .34 * f * f * f)]; };
+      const f = sm((t % 9) / 6);
+      c.strokeStyle = '#a3271c'; c.lineWidth = Math.max(2.5, u * .012); c.setLineDash([u * .03, u * .025]); c.lineCap = 'round'; c.beginPath(); for (let i = 0; i <= 60 * f; i++) { const p = P(i / 60); i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]); } c.stroke(); c.setLineDash([]);
+      [[0, 'Urál'], [.36, 'Levédia'], [.68, 'Etelköz'], [1, 'Kárpát-medence']].forEach(([s, n], i) => { const p = P(s), a = cl((f - s) * 8 + 1); c.globalAlpha = a; c.fillStyle = '#3b2716'; c.beginPath(); c.arc(p[0], p[1], u * .02, 0, TAU); c.fill(); c.font = `italic 500 ${Math.max(13, u * .058)}px Fraunces`; c.textAlign = i === 3 ? 'left' : 'right'; c.fillText(n, p[0] + (i === 3 ? -u * .08 : -u * .04), p[1] + (i === 3 ? u * .1 : -u * .03)); c.globalAlpha = 1; });
+      const p = P(f); c.fillStyle = '#a3271c'; c.beginPath(); c.arc(p[0], p[1], u * .032, 0, TAU); c.fill(); c.strokeStyle = 'rgba(163,39,28,.35)'; c.lineWidth = 2; c.beginPath(); c.arc(p[0], p[1], u * (.05 + .02 * Math.sin(t * 4)), 0, TAU); c.stroke();
+    },
+    chem(c, w, h, t) {
+      const u = Math.min(w, h * .6), cx = w / 2, cy = h * .56, T = t % 7, split = sm((T - 2.6) / .9), fly = cl((T - 3.2) / 3), R = u * .2;
+      const g = c.createRadialGradient(cx, cy, 0, cx, cy, u * .7); g.addColorStop(0, 'rgba(60,120,255,.20)'); g.addColorStop(1, 'rgba(60,120,255,0)'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+      const nx = lerp(cx - u * .6, cx - R * .4, sm(T / 2.5)); if (T < 2.6) { c.fillStyle = '#cfe0ff'; c.shadowColor = '#7fb0ff'; c.shadowBlur = 16; c.beginPath(); c.arc(nx, cy, u * .022, 0, TAU); c.fill(); c.shadowBlur = 0; }
+      const fl = Math.max(0, 1 - Math.abs(T - 3.3) * 2.2); if (fl > 0) { const g2 = c.createRadialGradient(cx, cy, 0, cx, cy, u * .6); g2.addColorStop(0, `rgba(255,240,190,${fl * .9})`); g2.addColorStop(1, 'rgba(255,200,80,0)'); c.fillStyle = g2; c.fillRect(0, 0, w, h); }
+      c.globalAlpha = 1 - sm((T - 6) / 1);
+      for (const n of nuc) { const wob = 1 + .05 * Math.sin(t * 5 + n.x * 9); const sx = n.s * (split * R * .75 + fly * u * .34), sy = n.s * fly * u * .12; const x = cx + n.x * R * wob * lerp(1, .8, split) + sx, y = cy + n.y * R * wob * lerp(1, .8, split) + sy, r = u * .034;
+        const g3 = c.createRadialGradient(x - r * .3, y - r * .3, r * .1, x, y, r); g3.addColorStop(0, n.p ? '#ffd0a8' : '#dfe8f5'); g3.addColorStop(1, n.p ? '#e0562c' : '#52698c'); c.fillStyle = g3; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
+      if (fly > 0) for (let i = 0; i < 3; i++) { const a = -1.2 + i * 1.2 + .5, d = fly * u * .75; c.fillStyle = '#cfe0ff'; c.beginPath(); c.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d * 1.3, u * .02, 0, TAU); c.fill(); }
+      c.globalAlpha = 1;
+    },
+    phys(c, w, h, t) {
+      const u = Math.min(w, h * .6), cx = w / 2, cy = h * .56, a = u * .34, b = u * .46, r = u * .12;
+      const pt = (f) => { const per = 2 * (2 * a - 2 * r) + 2 * (2 * b - 2 * r) + TAU * r; let d = ((f % 1) + 1) % 1 * per; const segs = [[2 * b - 2 * r, 0], [TAU * r / 4, 1], [2 * a - 2 * r, 0], [TAU * r / 4, 1], [2 * b - 2 * r, 0], [TAU * r / 4, 1], [2 * a - 2 * r, 0], [TAU * r / 4, 1]];
+        let x = cx - a, y = cy + b - r, dir = -Math.PI / 2; for (const [len, arc] of segs) { const q = Math.min(d, len); if (!arc) { x += Math.cos(dir) * q; y += Math.sin(dir) * q; } else { const ccx = x + Math.cos(dir + Math.PI / 2) * r, ccy = y + Math.sin(dir + Math.PI / 2) * r, th = q / r; const a0 = dir - Math.PI / 2; x = ccx + Math.cos(a0 + th) * r; y = ccy + Math.sin(a0 + th) * r; dir += th; } d -= q; if (d <= 0) break; } return [x, y]; };
+      c.lineWidth = u * .07; c.strokeStyle = 'rgba(120,170,255,.14)'; c.beginPath(); c.roundRect(cx - a, cy - b, 2 * a, 2 * b, r); c.stroke();
+      for (let i = 0; i < 90; i++) { const f = i / 90 + t * .03, p = pt(f), ff = ((f % 1) + 1) % 1, hot = ff > .25 && ff < .75; const k = hot ? sm((ff - .25) * 12) * (1 - sm((ff - .68) * 14)) : 0;
+        c.fillStyle = `rgb(${Math.round(lerp(86, 255, k))},${Math.round(lerp(200, 110, k))},${Math.round(lerp(255, 64, k))})`; c.beginPath(); c.arc(p[0] + Math.sin(i * 7.3) * u * .018, p[1] + Math.cos(i * 5.1) * u * .018, u * (i % 3 ? .011 : .017), 0, TAU); c.fill(); }
+      const q = pt(.25 + .0); c.fillStyle = '#16233d'; c.strokeStyle = 'rgba(200,215,245,.6)'; c.lineWidth = 2; c.beginPath(); c.arc(cx, cy + b, u * .085, 0, TAU); c.fill(); c.stroke();
+      c.save(); c.translate(cx, cy + b); c.rotate(t * 4); c.beginPath(); for (let k = 0; k < 3; k++) { c.moveTo(0, 0); c.lineTo(Math.cos(k * TAU / 3) * u * .06, Math.sin(k * TAU / 3) * u * .06); } c.stroke(); c.restore();
+      c.font = `600 ${Math.max(12, u * .05)}px "JetBrains Mono"`; c.textAlign = 'center'; c.fillStyle = '#56c8ff'; c.fillText('−24 °C', cx - a - 0, cy - b - u * .07); c.fillStyle = '#ff7a48'; c.fillText('+70 °C', cx + a, cy + b + u * .13);
+    },
+    math(c, w, h, t) {
+      const u = Math.min(w, h * .6), cx = w / 2, cy = h * .56, T = t % 8, f = sm((T - .6) / 4.4), r = u * .13, L = TAU * r, x0 = cx - L / 2, y0 = cy + u * .18;
+      c.strokeStyle = 'rgba(23,34,59,.10)'; c.lineWidth = 1; for (let x = (w / 2) % (u * .09); x < w; x += u * .09) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); } for (let y = cy % (u * .09); y < h; y += u * .09) { c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke(); }
+      c.strokeStyle = '#17223b'; c.lineWidth = 2; c.beginPath(); c.moveTo(x0 - u * .06, y0); c.lineTo(x0 + L + u * .06, y0); c.stroke();
+      c.font = `500 ${Math.max(12, u * .05)}px "JetBrains Mono"`; c.textAlign = 'center'; c.fillStyle = '#17223b'; for (let i = 0; i <= 3; i++) { const x = x0 + i * 2 * r; c.beginPath(); c.moveTo(x, y0); c.lineTo(x, y0 + u * .03); c.stroke(); c.fillText(i, x, y0 + u * .09); }
+      c.strokeStyle = '#e2452b'; c.lineWidth = Math.max(4, u * .02); c.lineCap = 'round'; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x0 + L * f, y0); c.stroke();
+      const wx = x0 + L * f, wy = y0 - r, a0 = Math.PI / 2 + f * TAU;
+      c.fillStyle = 'rgba(255,255,255,.75)'; c.strokeStyle = '#17223b'; c.lineWidth = 2.5; c.beginPath(); c.arc(wx, wy, r, 0, TAU); c.fill(); c.stroke();
+      c.strokeStyle = '#e2452b'; c.lineWidth = Math.max(4, u * .02); c.beginPath(); c.arc(wx, wy, r, a0, a0 + TAU * (1 - f)); c.stroke();
+      c.strokeStyle = '#17223b'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(wx, wy); c.lineTo(wx + Math.cos(a0) * r, wy + Math.sin(a0) * r); c.stroke();
+      c.globalAlpha = sm((T - 5) / .8) * (1 - sm((T - 7.3) / .6)); c.fillStyle = '#e2452b'; c.font = `italic 500 ${u * .2}px Fraunces`; c.fillText('π', x0 + L, y0 - u * .06 - 2 * r); c.globalAlpha = 1;
+    },
+    info(c, w, h, t) {
+      const u = Math.min(w, h * .6), cx = w / 2, cy = h * .56, d = Math.floor(t / 1.6) % 10, ph = (t / 1.6) % 1, cell = u * .062, gx = cx - cell * 2.5, gy = cy - u * .42;
+      c.fillStyle = 'rgba(182,242,60,.07)'; for (let x = (w / 2) % 22; x < w; x += 22) for (let y = 8; y < h; y += 22) c.fillRect(x, y, 1.5, 1.5);
+      const prev = DIG[(d + 9) % 10], cur = DIG[d];
+      for (let i = 0; i < 35; i++) { const v = lerp(+prev[i], +cur[i], sm(ph * 4)), x = gx + (i % 5) * cell, y = gy + Math.floor(i / 5) * cell; c.fillStyle = `rgba(182,242,60,${.07 + v * .9})`; c.fillRect(x + 1.5, y + 1.5, cell - 3, cell - 3); }
+      const oy = cy + u * .42, hy = cy + u * .2, act = sm((ph - .3) * 4);
+      for (let j = 0; j < 6; j++) { const hx = cx + (j - 2.5) * u * .13; for (let o = 0; o < 10; o++) { const ox = cx + (o - 4.5) * u * .085, on = o === d && (j + d) % 2 === 0; c.strokeStyle = on ? `rgba(182,242,60,${.15 + .7 * act})` : (o + j) % 3 ? 'rgba(90,220,255,.07)' : 'rgba(255,80,200,.08)'; c.lineWidth = on ? 2 : 1; c.beginPath(); c.moveTo(hx, hy); c.lineTo(ox, oy); c.stroke(); }
+        c.strokeStyle = 'rgba(182,242,60,.18)'; c.lineWidth = 1; c.beginPath(); c.moveTo(cx + (j - 2.5) * cell * .8, gy + cell * 7); c.lineTo(hx, hy); c.stroke();
+        c.fillStyle = `rgba(182,242,60,${.3 + .6 * Math.abs(Math.sin(d * 1.7 + j * 2.1)) * act})`; c.beginPath(); c.arc(hx, hy, u * .022, 0, TAU); c.fill(); }
+      c.font = `600 ${Math.max(11, u * .05)}px "JetBrains Mono"`; c.textAlign = 'center';
+      for (let o = 0; o < 10; o++) { const ox = cx + (o - 4.5) * u * .085, on = o === d; c.fillStyle = on ? `rgba(182,242,60,${.25 + .75 * act})` : 'rgba(236,255,230,.16)'; c.beginPath(); c.arc(ox, oy, u * (on ? .028 : .018), 0, TAU); c.fill(); c.fillStyle = on ? '#b6f23c' : 'rgba(236,255,230,.4)'; c.fillText(o, ox, oy + u * .09); }
+    },
+  };
+  function frame(now) {
+    const t = now / 1000;
+    for (const v of cvs) { if (!v.w) continue; const r = v.el.getBoundingClientRect(); if (Math.abs(r.width - v.w) > 1) { v.w = r.width; v.el.width = Math.round(r.width * v.d); } v.c.setTransform(v.d, 0, 0, v.d, 0, 0); v.c.clearRect(0, 0, v.w, v.h); draw[v.k](v.c, v.w, v.h, t); }
+    requestAnimationFrame(frame);
+  }
+  addEventListener('resize', fit); fit(); (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => requestAnimationFrame(frame));
+})();
+</script>
+</body>
+</html>

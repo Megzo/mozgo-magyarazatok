@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A maghasadás működése — Kémia</title>
+<link rel="stylesheet" href="shared/lesson.css">
+<style>
+  :root {
+    --bg: #05070d;
+    --ink: #e9eefb;
+    --muted: #8492b0;
+    --accent: #ffd166;
+    --accent-ink: #1d1400;
+    --accent2: #63d6ff;
+    --panel-bg: rgba(7, 11, 22, .74);
+    --panel-border: rgba(120, 190, 255, .16);
+    --rule: rgba(140, 190, 255, .16);
+    --panel-shadow: 0 30px 90px rgba(0, 0, 0, .6), 0 0 120px rgba(40, 120, 255, .06);
+  }
+  #eq {
+    position: absolute; left: 40px; top: 838px; width: 1300px; text-align: center; opacity: 0; pointer-events: none;
+    font-family: "Fraunces", serif; font-size: 62px; font-weight: 480; color: #e9eefb; letter-spacing: .01em; white-space: nowrap;
+  }
+  #eq sup { font-family: "JetBrains Mono", monospace; font-size: .46em; font-weight: 600; margin-right: 2px; vertical-align: .95em; line-height: 0; }
+  #eq .p { color: #ff8a66; } #eq .n { color: #9fdcff; } #eq .e { color: #ffd166; text-shadow: 0 0 28px rgba(255, 200, 80, .7); font-style: italic; }
+  #eq .op { color: #8492b0; margin: 0 .22em; font-weight: 300; }
+  #eq .bk.part { display: block; }
+  #eq .bk { margin-top: 20px; font-family: "JetBrains Mono", monospace; font-size: 23px; color: #8492b0; letter-spacing: .03em; }
+  #eq .bk b { color: #7be0a0; font-weight: 600; } #eq .bk i { font-style: normal; color: #c9d4ee; }
+  #eq .part { display: inline-block; opacity: 0; transform: translateY(14px); transition: opacity .5s, transform .5s cubic-bezier(.2, .8, .2, 1); }
+  #eq .part.on { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+<script src="shared/lesson.js"></script>
+<script>
+(function () {
+'use strict';
+const U = Lesson.U, { clamp, lerp, smooth, inOut, outBack, rgba, TAU } = U;
+const eOut = U.out;
+const DISP = '"Fraunces"', BODY = '"Bricolage Grotesque"', MONO = '"JetBrains Mono"';
+const C = { p: '#ff7a55', pL: '#ffb199', n: '#9db1cf', nL: '#d7e2f5', e: '#ffd166', cy: '#63d6ff', ink: '#e9eefb', mut: '#8492b0', bg: '#05070d', ok: '#7be0a0', bad: '#ff5d6c' };
+const rnd = U.rng(20261111);
+const R = (a = 1, b) => b === undefined ? rnd() * a : a + rnd() * (b - a);
+
+/* ════════════════ rajz-segédek ════════════════ */
+function T(ctx, s, x, y, o = {}) {
+  ctx.save(); ctx.font = o.f || `500 24px ${BODY}`; ctx.fillStyle = o.c || C.ink; ctx.textAlign = o.a || 'left'; ctx.textBaseline = o.b || 'alphabetic';
+  ctx.globalAlpha *= o.al === undefined ? 1 : o.al;
+  if (o.glow) { ctx.shadowColor = o.glow; ctx.shadowBlur = o.blur || 24; }
+  ctx.fillText(s, x, y); ctx.restore();
+}
+/* nuklid-jelölés: felső indexes tömegszám + vegyjel; visszaadja a szélességet */
+function nuclide(ctx, x, y, A, sym, size, color, align = 'left', al = 1) {
+  ctx.save(); ctx.globalAlpha *= al; ctx.textBaseline = 'alphabetic';
+  const fs = `600 ${Math.round(size * .46)}px ${MONO}`, fm = `520 ${size}px ${DISP}`;
+  ctx.font = fs; const wA = ctx.measureText(A).width + size * .04; ctx.font = fm; const wS = ctx.measureText(sym).width; const w = wA + wS;
+  let x0 = x; if (align === 'center') x0 = x - w / 2; else if (align === 'right') x0 = x - w;
+  ctx.fillStyle = color; ctx.textAlign = 'left';
+  ctx.font = fs; ctx.fillText(A, x0, y - size * .40); ctx.font = fm; ctx.fillText(sym, x0 + wA, y);
+  ctx.restore(); return w;
+}
+function leader(ctx, x1, y1, x2, y2, color, al = 1, p = 1) {
+  ctx.save(); ctx.globalAlpha *= al; ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(lerp(x1, x2, p), lerp(y1, y2, p)); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x1, y1, 4, 0, TAU); ctx.fill(); ctx.restore();
+}
+function arrow(ctx, x1, y1, x2, y2, color, w = 3, head = 12) {
+  const a = Math.atan2(y2 - y1, x2 - x1); ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2 - Math.cos(a) * head * .6, y2 - Math.sin(a) * head * .6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - Math.cos(a - .42) * head, y2 - Math.sin(a - .42) * head); ctx.lineTo(x2 - Math.cos(a + .42) * head, y2 - Math.sin(a + .42) * head); ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function card(ctx, x, y, w, h, al = 1) {
+  ctx.save(); ctx.globalAlpha *= al; rr(ctx, x, y, w, h, 18); ctx.fillStyle = 'rgba(10,16,32,.66)'; ctx.fill(); ctx.strokeStyle = 'rgba(130,185,255,.18)'; ctx.lineWidth = 1.2; ctx.stroke(); ctx.restore();
+}
+function glow(ctx, x, y, r, color, al) {
+  if (al <= 0.003 || r <= 0) return; const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, rgba(color, al)); g.addColorStop(1, rgba(color, 0)); ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+}
+const sp3 = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const hu = (v, d = 1) => v.toFixed(d).replace('.', ',');
+
+/* ════════════════ gömb-sprite-ok ════════════════ */
+const LV = 6;
+function sphereSprites(hi, mid, lo) {
+  const out = [];
+  for (let l = 0; l < LV; l++) {
+    const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d');
+    const gr = g.createRadialGradient(34, 30, 3, 48, 48, 47);
+    gr.addColorStop(0, hi); gr.addColorStop(.38, mid); gr.addColorStop(1, lo);
+    g.fillStyle = gr; g.beginPath(); g.arc(48, 48, 46, 0, TAU); g.fill();
+    const hl = g.createRadialGradient(33, 27, 0, 33, 27, 17); hl.addColorStop(0, 'rgba(255,255,255,.85)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = hl; g.beginPath(); g.arc(48, 48, 46, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 2; g.beginPath(); g.arc(48, 48, 45, 0, TAU); g.stroke();
+    if (l) { g.globalCompositeOperation = 'source-atop'; g.fillStyle = `rgba(5,8,18,${l * .125})`; g.fillRect(0, 0, 96, 96); }
+    out.push(c);
+  }
+  return out;
+}
+let SP_P, SP_N, MINI, MINI_DEAD;
+function makeMini(dead) {
+  const c = document.createElement('canvas'); c.width = c.height = 40; const g = c.getContext('2d'); const r2 = U.rng(7);
+  const pts = []; for (let i = 0; i < 19; i++) { const a = r2() * TAU, d = Math.sqrt(r2()) * 9.5; pts.push([20 + Math.cos(a) * d, 20 + Math.sin(a) * d, r2() < .4]); }
+  for (const [x, y, p] of pts) g.drawImage((p ? SP_P : SP_N)[dead ? 4 : 0], x - 5, y - 5, 10, 10);
+  return c;
+}
+
+/* ════════════════ 1. jelenet: az atommag (nukleon-szimuláció) ════════════════ */
+const N = 236, G = 60, KR = 420, DAMP = .86, SDT = 1 / 120;
+const NS = {
+  x: new Float32Array(N), y: new Float32Array(N), z: new Float32Array(N), vx: new Float32Array(N), vy: new Float32Array(N), vz: new Float32Array(N),
+  fx: new Float32Array(N), fy: new Float32Array(N), fz: new Float32Array(N), zr: new Float32Array(N), yr: new Float32Array(N),
+  isP: new Uint8Array(N), lobe: new Uint8Array(N), rank: new Float32Array(N), ord: [], active: 235, c1: 0, c2: 0, q: 0, qAmp: 0, qPh: 0,
+  mode: 'u235', R: 7, S0: 32, sep: 0, split: false, tSplit: 0, free: [], ax: 7, ay: 7, capT: -1, nAlpha: 1,
+};
+function nsStep(temp) {
+  const { x, y, z, vx, vy, vz, fx, fy, fz, lobe } = NS, n = NS.active, q = NS.q;
+  for (let i = 0; i < n; i++) {
+    if (lobe[i] === 3) continue;
+    const c = lobe[i] === 2 ? NS.c2 : NS.c1, dx = x[i] - c, d = Math.hypot(dx, y[i], z[i]), k = -G / Math.max(d, 2);
+    fx[i] = k * dx + q * dx; fy[i] = k * y[i] - q * .5 * y[i]; fz[i] = k * z[i] - q * .5 * z[i];
+  }
+  for (let i = 1; i < n; i++) {
+    if (lobe[i] === 3) continue; const xi = x[i], yi = y[i], zi = z[i];
+    for (let j = 0; j < i; j++) {
+      const dx = xi - x[j]; if (dx > 2 || dx < -2) continue; const dy = yi - y[j]; if (dy > 2 || dy < -2) continue;
+      const dz = zi - z[j], d2 = dx * dx + dy * dy + dz * dz; if (d2 >= 4 || lobe[j] === 3) continue;
+      const d = Math.sqrt(d2) || .01, f = KR * (2 - d) / d;
+      fx[i] += f * dx; fy[i] += f * dy; fz[i] += f * dz; fx[j] -= f * dx; fy[j] -= f * dy; fz[j] -= f * dz;
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    if (lobe[i] === 3) continue;
+    vx[i] = (vx[i] + fx[i] * SDT + temp * (Math.random() - .5)) * DAMP; vy[i] = (vy[i] + fy[i] * SDT + temp * (Math.random() - .5)) * DAMP; vz[i] = (vz[i] + fz[i] * SDT + temp * (Math.random() - .5)) * DAMP;
+    x[i] += vx[i] * SDT; y[i] += vy[i] * SDT; z[i] += vz[i] * SDT;
+  }
+}
+let SNAP235, SNAP236;
+const snap = () => ({ x: NS.x.slice(), y: NS.y.slice(), z: NS.z.slice() });
+function restore(s, mode) {
+  NS.x.set(s.x); NS.y.set(s.y); NS.z.set(s.z); NS.vx.fill(0); NS.vy.fill(0); NS.vz.fill(0); NS.lobe.fill(1);
+  NS.c1 = NS.c2 = 0; NS.sep = 0; NS.split = false; NS.free = []; NS.mode = mode; NS.active = mode === 'u235' ? 235 : 236; NS.capT = -1; NS.nAlpha = 0;
+}
+function nsInit() {
+  const idx = [...Array(235).keys()]; for (let i = 234; i > 0; i--) { const j = Math.floor(rnd() * (i + 1));[idx[i], idx[j]] = [idx[j], idx[i]]; }
+  for (let k = 0; k < 92; k++) NS.isP[idx[k]] = 1;
+  for (let i = 0; i < N; i++) {
+    let a, b, c; do { a = R(-1, 1); b = R(-1, 1); c = R(-1, 1); } while (a * a + b * b + c * c > 1);
+    NS.x[i] = a * 8.5; NS.y[i] = b * 8.5; NS.z[i] = c * 8.5; NS.rank[i] = rnd();
+  }
+  NS.lobe.fill(1); NS.active = 236; for (let k = 0; k < 420; k++) nsStep(.2);
+  SNAP236 = snap();
+  NS.active = 235; for (let k = 0; k < 200; k++) nsStep(.2);
+  SNAP235 = snap();
+  let s = 0; for (let i = 0; i < 235; i++) s += NS.x[i] ** 2 + NS.y[i] ** 2 + NS.z[i] ** 2;
+  NS.R = Math.sqrt(5 / 3 * s / 235) + .6; NS.S0 = 232 / NS.R;
+  NS.R1 = NS.R * Math.cbrt(141 / 236); NS.R2 = NS.R * Math.cbrt(92 / 236); NS.sepSc = (NS.R1 + NS.R2) * .93;
+  for (let i = 0; i < N; i++) NS.ord.push(i);
+  restore(SNAP235, 'u235'); NS.nAlpha = 1;
+}
+function assignLobes() {
+  const P = [], Nn = []; for (let i = 0; i < 236; i++) (NS.isP[i] ? P : Nn).push(i);
+  P.sort((a, b) => NS.x[a] - NS.x[b]); Nn.sort((a, b) => NS.x[a] - NS.x[b]);
+  P.forEach((i, k) => NS.lobe[i] = k < 56 ? 1 : 2); Nn.forEach((i, k) => NS.lobe[i] = k < 85 ? 1 : (k < 88 ? 1 : 2));
+  NS.freeIdx = [Nn[85], Nn[86], Nn[87]];
+}
+const TS = 5.0;                       // a szakadás pillanata a 4. lépésben
+const FDIR = [[-104, 10.5], [74, 13.5], [-58, 12.5]];  // szabad neutronok iránya (fok) és távolsága
+let rotA = 0;
+function camA(L) {
+  const s0 = NS.S0, mid = NS.sep * (141 - 92) / 466, s3 = s0 * .6;
+  const k = [{ cx: 690, cy: 545, s: s0 }, { cx: 690, cy: 520, s: s0 * .92 }, { cx: 790, cy: 545, s: s0 * .9 }, { cx: 690 - s3 * mid, cy: 440, s: s3 }];
+  const f = clamp(L.sp, 0, 3), i = Math.min(2, Math.floor(f)), t = smooth(f - i);
+  return { cx: lerp(k[i].cx, k[i + 1].cx, t), cy: lerp(k[i].cy, k[i + 1].cy, t), s: lerp(k[i].s, k[i + 1].s, t) };
+}
+function updateA(L) {
+  const st = L.st, step = L.step; if (step > 3) return;
+  let qT = .5, w = 1.9;
+  if (step === 1) { qT = 3.4; w = 2.1; }
+  if (step === 2) {
+    qT = NS.mode === 'u236' ? 6 : .6; w = 2.6;
+    const nx = -NS.R - 1.1;
+    if (NS.mode === 'u235') {
+      NS.active = 235; const p = L.prog(1.0, 4.2);
+      NS.x[235] = lerp(-27, nx, p); NS.y[235] = .4 + Math.sin(L.t * 3) * .12; NS.z[235] = 0; NS.nAlpha = smooth(L.prog(.6, 1.4));
+      if (p >= 1) { NS.mode = 'u236'; NS.active = 236; NS.lobe[235] = 1; NS.vx[235] = 9; NS.vy[235] = NS.vz[235] = 0; NS.capT = L.t; }
+    }
+  }
+  if (step === 3) {
+    w = 2.8; qT = st < 1.3 ? 6.5 : 6.5 * (1 - smooth(L.prog(1.3, 2.6)));
+    if (!NS.split) {
+      const sp = NS.sepSc * inOut(L.prog(1.0, TS - .05)), dd = (sp - NS.sep) * .36; NS.sep = sp; NS.c1 = -sp * 92 / 233; NS.c2 = sp * 141 / 233;
+      if (dd > 0) for (let i = 0; i < 236; i++) NS.x[i] += NS.lobe[i] === 2 ? dd * 141 / 233 : -dd * 92 / 233;
+      if (st >= TS) {
+        NS.split = true; NS.mode = 'split'; NS.tSplit = L.t; NS.free = [];
+        const ca = Math.cos(rotA), sa = Math.sin(rotA);
+        NS.freeIdx.forEach((i, k) => { NS.lobe[i] = 3; const a = FDIR[k][0] * Math.PI / 180; NS.free.push({ ux: NS.x[i], uy: NS.y[i] * ca - NS.z[i] * sa, dx: Math.cos(a), dy: Math.sin(a), far: FDIR[k][1] }); });
+      }
+    } else {
+      const te = st - TS, ns = NS.sepSc + 21 * eOut(te / 2.8) + .22 * Math.min(te, 30), d = ns - NS.sep; NS.sep = ns;
+      const d1 = -d * 92 / 233, d2 = d * 141 / 233; NS.c1 += d1; NS.c2 += d2;
+      for (let i = 0; i < 236; i++) { if (NS.lobe[i] === 1) NS.x[i] += d1; else if (NS.lobe[i] === 2) NS.x[i] += d2; }
+    }
+  }
+  NS.qAmp += (qT - NS.qAmp) * Math.min(1, L.dt * 2.5); NS.qPh += L.dt * w; NS.q = NS.qAmp * Math.sin(NS.qPh);
+  const temp = step >= 2 && NS.mode !== 'u235' ? .9 : .55;
+  const sub = Math.max(1, Math.min(4, Math.round(L.dt / SDT))); for (let k = 0; k < sub; k++) nsStep(temp);
+  // burkoló ellipszis (cseppmodell)
+  if (!NS.split) {
+    let sx = 0, sr = 0, n = 0; for (let i = 0; i < NS.active; i++) { sx += NS.x[i] ** 2; sr += NS.y[i] ** 2 + NS.z[i] ** 2; n++; }
+    NS.ax = Math.sqrt(5 * sx / n) + 1; NS.ay = Math.sqrt(2.5 * sr / n) + 1;
+  }
+}
+function drawNucleons(ctx, L, cam) {
+  const { x, y, z, zr, yr, ord, isP, lobe, rank } = NS; rotA = L.t * .16; const ca = Math.cos(rotA), sa = Math.sin(rotA);
+  for (let i = 0; i < 236; i++) { yr[i] = y[i] * ca - z[i] * sa; zr[i] = y[i] * sa + z[i] * ca; }
+  ord.sort((a, b) => zr[a] - zr[b]);
+  const s = cam.s, appear = L.step === 0, st = L.st, zn = NS.R;
+  for (let k = 0; k < 236; k++) {
+    const i = ord[k]; if (lobe[i] === 3) continue;
+    let sc = 1, al = 1;
+    if (i === 235) { if (NS.mode === 'u235' && L.step !== 2) continue; al = NS.mode === 'u235' ? NS.nAlpha : 1; }
+    if (appear) { sc = outBack(clamp((st - .25 - rank[i] * 2.3) / .45)); if (sc <= 0) continue; }
+    const pf = 1 + zr[i] * .012, r = s * 1.13 * pf * sc, lv = clamp(Math.round((1 - (zr[i] + zn) / (2 * zn)) * (LV - 1)), 0, LV - 1);
+    if (al < 1) ctx.globalAlpha = al;
+    ctx.drawImage((isP[i] ? SP_P : SP_N)[i === 235 && NS.mode === 'u235' ? 0 : lv], cam.cx + s * x[i] * pf - r, cam.cy + s * yr[i] * pf - r, r * 2, r * 2);
+    if (al < 1) ctx.globalAlpha = 1;
+  }
+}
+const vis = (L, k, w = 1.7) => clamp(1 - Math.abs(L.sp - k) * w);
+const TT = (L, k) => L.step === k ? L.st : (L.step > k ? 999 : 0);
+const pr = (t, a, b) => clamp((t - a) / (b - a));
+
+function drawA(ctx, L) {
+  updateA(L); const cam = camA(L), s = cam.s, t = L.t, exc = NS.mode !== 'u235' ? 1 : 0;
+  // háttérfény a mag mögött
+  ctx.globalCompositeOperation = 'lighter';
+  if (!NS.split) { glow(ctx, cam.cx, cam.cy, s * NS.R * 2.5, '#2b7dff', .20 + .04 * Math.sin(t * 1.3)); if (exc) glow(ctx, cam.cx, cam.cy, s * NS.R * 2.1, '#ff9a3c', .10 + .05 * Math.sin(t * 5)); }
+  else { glow(ctx, cam.cx + s * NS.c1, cam.cy, s * NS.R1 * 2.6, '#ff8a3c', .16); glow(ctx, cam.cx + s * NS.c2, cam.cy, s * NS.R2 * 2.6, '#ff8a3c', .16); }
+  ctx.globalCompositeOperation = 'source-over';
+
+  // ── cseppmodell burkoló (2. lépés) ──
+  const v1 = vis(L, 1);
+  if (v1 > 0 && !NS.split) {
+    const t1 = TT(L, 1), a = v1 * smooth(pr(t1, .2, 1.2)), ax = NS.ax * s + 14, ay = NS.ay * s + 14;
+    ctx.save(); ctx.globalAlpha = a;
+    const g = ctx.createRadialGradient(cam.cx, cam.cy, ay * .5, cam.cx, cam.cy, Math.max(ax, ay) * 1.05);
+    g.addColorStop(0, 'rgba(99,214,255,0)'); g.addColorStop(1, 'rgba(99,214,255,.20)');
+    ctx.beginPath(); ctx.ellipse(cam.cx, cam.cy, ax, ay, 0, 0, TAU); ctx.fillStyle = g; ctx.fill();
+    ctx.restore();
+  }
+  drawNucleons(ctx, L, cam);
+  if (v1 > 0 && !NS.split) {
+    const t1 = TT(L, 1), a = v1 * smooth(pr(t1, .2, 1.2)), ax = NS.ax * s + 14, ay = NS.ay * s + 14;
+    ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = C.cy; ctx.lineWidth = 3; ctx.shadowColor = C.cy; ctx.shadowBlur = 22;
+    ctx.beginPath(); ctx.ellipse(cam.cx, cam.cy, ax, ay, 0, 0, TAU); ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.ellipse(cam.cx - ax * .35, cam.cy - ay * .45, ax * .35, ay * .18, -.5, Math.PI * 1.05, Math.PI * 1.85); ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.restore();
+    // erők nyilai
+    const aS = v1 * smooth(pr(t1, 1.4, 2.3)), aC = v1 * smooth(pr(t1, 3.0, 3.9)), pul = .5 + .5 * Math.sin(t * 2.4);
+    if (aS > 0) {
+      ctx.save(); ctx.globalAlpha = aS;
+      for (let k = 0; k < 10; k++) { const an = k / 10 * TAU + .31, ex = Math.cos(an), ey = Math.sin(an), r0 = 62 - pul * 12, r1 = 14 - pul * 4; arrow(ctx, cam.cx + ex * (ax + r0), cam.cy + ey * (ay + r0), cam.cx + ex * (ax + r1), cam.cy + ey * (ay + r1), C.cy, 3.5, 13); }
+      leader(ctx, cam.cx - ax * .78, cam.cy - ay * .86, 250, 180, C.cy, 1, smooth(pr(t1, 1.6, 2.3)));
+      T(ctx, 'erős kölcsönhatás', 60, 150, { f: `600 34px ${DISP}`, c: C.cy }); T(ctx, 'összetart – de csak a szomszédok között hat', 60, 186, { f: `400 23px ${BODY}`, c: C.mut });
+      ctx.restore();
+    }
+    if (aC > 0) {
+      ctx.save(); ctx.globalAlpha = aC;
+      for (const sg of [-1, 1]) for (const oy of [-46, 0, 46]) { const len = 78 + pul * 26 - Math.abs(oy) * .3; arrow(ctx, cam.cx + sg * 20, cam.cy + oy, cam.cx + sg * (20 + len), cam.cy + oy * 1.15, C.e, 4.5, 15); }
+      leader(ctx, cam.cx + 110, cam.cy + 50, 1060, 878, C.e, 1, smooth(pr(t1, 3.2, 3.9)));
+      T(ctx, 'elektromos taszítás', 1320, 912, { f: `600 34px ${DISP}`, c: C.e, a: 'right' }); T(ctx, 'a 92 proton egymást szétfeszíti – messzire hat', 1320, 948, { f: `400 23px ${BODY}`, c: C.mut, a: 'right' });
+      ctx.restore();
+    }
+    // egyensúly-mérő
+    const aM = v1 * smooth(pr(t1, 4.6, 5.5));
+    if (aM > 0) {
+      ctx.save(); ctx.globalAlpha = aM; const mx = 60, my = 962, mw = 560;
+      T(ctx, 'ÖSSZETARTÁS', mx, my - 16, { f: `600 19px ${MONO}`, c: C.cy }); T(ctx, 'TASZÍTÁS', mx + mw, my - 16, { f: `600 19px ${MONO}`, c: C.e, a: 'right' });
+      const gr = ctx.createLinearGradient(mx, 0, mx + mw, 0); gr.addColorStop(0, C.cy); gr.addColorStop(1, C.e); rr(ctx, mx, my, mw, 10, 5); ctx.fillStyle = gr; ctx.globalAlpha = aM * .55; ctx.fill(); ctx.globalAlpha = aM;
+      const pos = mx + mw * (.5 + .34 * NS.q / 3.4 * .5 + .33);
+      ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 16; ctx.beginPath(); ctx.moveTo(pos, my - 6); ctx.lineTo(pos + 11, my + 26); ctx.lineTo(pos - 11, my + 26); ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
+      T(ctx, 'He', mx + mw * .06, my + 46, { f: `500 20px ${MONO}`, c: C.mut, a: 'center' }); T(ctx, 'Fe', mx + mw * .3, my + 46, { f: `500 20px ${MONO}`, c: C.mut, a: 'center' }); T(ctx, 'Pb', mx + mw * .7, my + 46, { f: `500 20px ${MONO}`, c: C.mut, a: 'center' }); T(ctx, 'U', mx + mw * .83, my + 46, { f: `700 22px ${MONO}`, c: '#fff', a: 'center' });
+      ctx.restore();
+    }
+  }
+
+  // ── 1. lépés feliratai ──
+  const v0 = vis(L, 0);
+  if (v0 > 0) {
+    const t0 = TT(L, 0); ctx.save(); ctx.globalAlpha = v0;
+    const aT = smooth(pr(t0, .2, 1)); nuclide(ctx, 64, 190, '235', 'U', 124, C.ink, 'left', aT); T(ctx, 'urán-235', 70, 236, { f: `italic 400 36px ${DISP}`, c: C.mut, al: aT });
+    const cnt = clamp((t0 - .25) / 2.6), nP = Math.round(92 * cnt), nN = Math.round(143 * cnt);
+    const aP = smooth(pr(t0, .5, 1.2));
+    leader(ctx, cam.cx - 150, cam.cy - 150, 372, 392, C.p, aP * smooth(pr(t0, 2.4, 3)));
+    T(ctx, String(nP), 64, 400, { f: `700 76px ${MONO}`, c: C.p, al: aP }); T(ctx, 'proton', 190, 376, { f: `600 30px ${BODY}`, c: C.pL, al: aP }); T(ctx, 'pozitív töltés (+)', 190, 406, { f: `400 22px ${BODY}`, c: C.mut, al: aP });
+    leader(ctx, cam.cx - 190, cam.cy + 110, 360, 548, C.n, aP * smooth(pr(t0, 2.6, 3.2)));
+    T(ctx, String(nN), 64, 560, { f: `700 76px ${MONO}`, c: C.n, al: aP }); T(ctx, 'neutron', 236, 536, { f: `600 30px ${BODY}`, c: C.nL, al: aP }); T(ctx, 'semleges', 236, 566, { f: `400 22px ${BODY}`, c: C.mut, al: aP });
+    const aS = smooth(pr(t0, 3.2, 4)); ctx.globalAlpha = v0 * aS;
+    ctx.strokeStyle = C.mut; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(64, 650); ctx.lineTo(340, 650); ctx.stroke();
+    T(ctx, '= 235 nukleon', 64, 700, { f: `600 36px ${DISP}`, c: C.e }); T(ctx, 'ez a tömegszám', 64, 734, { f: `400 22px ${BODY}`, c: C.mut });
+    // méretvonal
+    const aD = smooth(pr(t0, 4, 4.8)); ctx.globalAlpha = v0 * aD; const rx = s * NS.R, yy = cam.cy + rx + 58;
+    ctx.strokeStyle = C.mut; ctx.beginPath(); ctx.moveTo(cam.cx - rx, yy); ctx.lineTo(cam.cx + rx, yy); ctx.moveTo(cam.cx - rx, yy - 10); ctx.lineTo(cam.cx - rx, yy + 10); ctx.moveTo(cam.cx + rx, yy - 10); ctx.lineTo(cam.cx + rx, yy + 10); ctx.stroke();
+    T(ctx, '≈ 15 femtométer · az atom átmérőjének kb. húszezred része', cam.cx, yy + 40, { f: `500 22px ${MONO}`, c: C.mut, a: 'center' });
+    ctx.restore();
+  }
+
+  // ── 3. lépés: neutronbefogás ──
+  const v2 = vis(L, 2);
+  if (v2 > 0) {
+    const t2 = TT(L, 2); ctx.save(); ctx.globalAlpha = v2;
+    const cap = NS.mode !== 'u235';
+    if (!cap && L.step === 2) {
+      const nx = cam.cx + s * NS.x[235], ny = cam.cy + s * NS.yr[235];
+      ctx.globalCompositeOperation = 'lighter'; const g = ctx.createLinearGradient(nx - 240, 0, nx, 0); g.addColorStop(0, 'rgba(99,214,255,0)'); g.addColorStop(1, 'rgba(99,214,255,.5)');
+      ctx.strokeStyle = g; ctx.lineWidth = s * .9; ctx.lineCap = 'round'; ctx.globalAlpha = v2 * NS.nAlpha; ctx.beginPath(); ctx.moveTo(nx - 240, ny); ctx.lineTo(nx - s, ny); ctx.stroke();
+      glow(ctx, nx, ny, s * 3.2, C.cy, .35); ctx.globalCompositeOperation = 'source-over';
+      const la = NS.nAlpha * v2; ctx.globalAlpha = la; leader(ctx, nx, ny + s * 1.4, nx, ny + 120, C.cy, 1);
+      T(ctx, 'lassú (termikus) neutron', nx, ny + 156, { f: `600 27px ${BODY}`, c: C.cy, a: 'center' }); T(ctx, '≈ 2 km/s · nincs töltése', nx, ny + 188, { f: `500 21px ${MONO}`, c: C.mut, a: 'center' });
+    }
+    ctx.globalAlpha = v2;
+    const aA = cap ? 0 : smooth(pr(t2, .2, 1)), aB = cap ? smooth(clamp((L.t - NS.capT) / .7)) : 0;
+    if (aA > 0) { nuclide(ctx, 64, 190, '235', 'U', 124, C.ink, 'left', aA); T(ctx, 'urán-235 · stabilnak tűnik', 70, 236, { f: `italic 400 34px ${DISP}`, c: C.mut, al: aA }); }
+    if (cap) {
+      const w = nuclide(ctx, 64, 190, '236', 'U', 124, C.e, 'left', aB); T(ctx, '*', 64 + w + 4, 150, { f: `600 80px ${DISP}`, c: C.e, al: aB, glow: C.e });
+      T(ctx, 'gerjesztett urán-236', 70, 236, { f: `italic 400 34px ${DISP}`, c: C.pL, al: aB });
+      const aE = smooth(clamp((L.t - NS.capT - .8) / .8)); T(ctx, '92 p + 144 n', 70, 300, { f: `600 30px ${MONO}`, c: C.ink, al: aE }); T(ctx, '+ ≈ 6,5 MeV fölös energia', 70, 340, { f: `600 26px ${MONO}`, c: C.e, al: aE });
+      T(ctx, 'a mag hevesen rezeg – a csepp alakja torzul', cam.cx, cam.cy + s * NS.R + 110, { f: `400 26px ${BODY}`, c: C.mut, a: 'center', al: smooth(clamp((L.t - NS.capT - 1.8) / .8)) });
+      // befogás-villanás
+      const fl = (L.t - NS.capT) / 1.1; if (fl < 1) { ctx.globalCompositeOperation = 'lighter'; glow(ctx, cam.cx, cam.cy, s * NS.R * (1.2 + fl * 2), C.cy, .5 * (1 - fl)); ctx.globalAlpha = v2 * (1 - fl); ctx.strokeStyle = C.cy; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(cam.cx, cam.cy, s * NS.R * (1 + fl * 1.3), 0, TAU); ctx.stroke(); ctx.globalCompositeOperation = 'source-over'; }
+    }
+    ctx.restore();
+  }
+
+  // ── 4. lépés: a hasadás ──
+  const v3 = L.sp > 3 ? 1 : vis(L, 3);
+  if (v3 > 0) {
+    const t3 = TT(L, 3), te = t3 - TS; ctx.save(); ctx.globalAlpha = v3;
+    // fázis-jelzők
+    const ph = t3 < 1.2 ? 0 : t3 < 3.3 ? 1 : t3 < TS ? 2 : 3, names = ['megnyúlás', 'befűződés', 'szakadás'], aCh = smooth(pr(t3, .2, 1));
+    for (let k = 0; k < 3; k++) {
+      const x = 370 + k * 320, on = ph === k + 1, done = ph > k + 1;
+      ctx.globalAlpha = v3 * aCh * (on ? 1 : done ? .75 : .4);
+      T(ctx, String(k + 1), x - 14, 92, { f: `700 26px ${MONO}`, c: on ? C.e : C.mut, a: 'right' }); T(ctx, names[k], x, 92, { f: `${on ? 600 : 400} 34px ${DISP}`, c: on ? C.e : C.ink, glow: on ? C.e : null });
+      if (k < 2) { ctx.strokeStyle = C.mut; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x + 190, 82); ctx.lineTo(x + 250, 82); ctx.stroke(); }
+    }
+    ctx.globalAlpha = v3;
+    if (!NS.split && L.step === 3) {
+      const aN = smooth(pr(t3, 3.5, 4.2)) * (1 - pr(t3, TS - .15, TS));
+      if (aN > 0) { const nx = cam.cx + s * (NS.c1 + NS.R1 * .93); leader(ctx, nx, cam.cy - s * 3.2, nx + 40, cam.cy - 215, C.e, aN); T(ctx, '„nyak”: itt már csak néhány nukleon tartja össze', nx + 52, cam.cy - 222, { f: `500 23px ${BODY}`, c: C.e, al: aN }); }
+      const aL = smooth(pr(t3, .3, 1)) * (1 - pr(t3, 2.4, 3)); nuclide(ctx, cam.cx, cam.cy + s * NS.R + 96, '236', 'U*', 56, C.e, 'center', aL);
+    }
+    if (NS.split) {
+      const xa = cam.cx + s * NS.c1, xb = cam.cx + s * NS.c2, nk = cam.cx + s * (NS.c1 + NS.c2) / 2 + s * (NS.R1 - NS.R2) / 2;
+      // villanás + gamma
+      ctx.globalCompositeOperation = 'lighter';
+      const fl = clamp(te / 1.6); if (fl < 1) { glow(ctx, nk, cam.cy, 520 * (.25 + fl), '#fff3c4', .95 * (1 - fl) ** 2); glow(ctx, nk, cam.cy, 900, '#ffb040', .35 * (1 - fl)); }
+      const gf = clamp(te / 2.6);
+      if (gf < 1) for (let k = 0; k < 5; k++) {
+        const an = [-2.45, -.62, .5, 2.2, 1.35][k], d0 = 60 + gf * 900, len = 190; ctx.strokeStyle = rgba('#fff0b0', .9 * (1 - gf)); ctx.lineWidth = 3; ctx.beginPath();
+        for (let q = 0; q <= 40; q++) { const d = d0 - len + q / 40 * len, wv = Math.sin(q * .9 - te * 30) * 9, px = nk + Math.cos(an) * d - Math.sin(an) * wv, py = cam.cy + Math.sin(an) * d + Math.cos(an) * wv; q ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.stroke();
+        if (gf > .12 && gf < .8) T(ctx, 'γ', nk + Math.cos(an) * (d0 + 26), cam.cy + Math.sin(an) * (d0 + 26) + 12, { f: `italic 600 36px ${DISP}`, c: '#fff0b0', a: 'center', al: 1 - gf });
+      }
+      // szabad neutronok
+      NS.free.forEach((f, k) => {
+        const d = f.far * eOut(te / 2.3) + .35 * Math.min(te, 30), ox = cam.cx + s * f.ux, oy = cam.cy + s * f.uy, px = ox + s * f.dx * d, py = oy + s * f.dy * d;
+        const g = ctx.createLinearGradient(ox, oy, px, py); g.addColorStop(0, 'rgba(99,214,255,0)'); g.addColorStop(1, 'rgba(140,225,255,.75)');
+        ctx.strokeStyle = g; ctx.lineWidth = s * .7; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(lerp(ox, px, .25), lerp(oy, py, .25)); ctx.lineTo(px, py); ctx.stroke(); glow(ctx, px, py, s * 3.4, C.cy, .45);
+        f.px = px; f.py = py;
+      });
+      // sebességcsíkok
+      const sa = clamp(te / .4) * (1 - clamp((te - 1.6) / 1.6));
+      if (sa > 0) for (const [xc, rr2, dir] of [[xa, NS.R1, 1], [xb, NS.R2, -1]]) for (let k = -3; k <= 3; k++) { const yy = cam.cy + k * s * rr2 * .27, x0 = xc + dir * s * rr2 * Math.sqrt(1 - (k * .27) ** 2) * 1.05; const g = ctx.createLinearGradient(x0, 0, x0 + dir * 190, 0); g.addColorStop(0, rgba('#ffb060', .5 * sa)); g.addColorStop(1, 'rgba(255,176,96,0)'); ctx.strokeStyle = g; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x0, yy); ctx.lineTo(x0 + dir * 190, yy); ctx.stroke(); }
+      ctx.globalCompositeOperation = 'source-over';
+      NS.free.forEach((f) => { const r = s * 1.13; ctx.drawImage(SP_N[0], f.px - r, f.py - r, r * 2, r * 2); });
+      // feliratok
+      const aF = smooth(pr(te, 1.3, 2.1)), yb = cam.cy + s * NS.R1 + 78; ctx.globalAlpha = v3;
+      nuclide(ctx, xa, yb, '141', 'Ba', 60, C.ink, 'center', aF); T(ctx, 'bárium · 56 p + 85 n', xa, yb + 36, { f: `500 22px ${MONO}`, c: C.mut, a: 'center', al: aF });
+      nuclide(ctx, xb, yb, '92', 'Kr', 60, C.ink, 'center', aF); T(ctx, 'kripton · 36 p + 56 n', xb, yb + 36, { f: `500 22px ${MONO}`, c: C.mut, a: 'center', al: aF });
+      const aR = smooth(pr(te, 1.9, 2.7)), ym = cam.cy - s * NS.R1 - 44;
+      if (aR > 0) { ctx.globalAlpha = v3 * aR; 
+        arrow(ctx, nk - 34, cam.cy, xa + s * NS.R1 + 16, cam.cy, C.e, 3.5, 15); arrow(ctx, nk + 34, cam.cy, xb - s * NS.R2 - 16, cam.cy, C.e, 3.5, 15); ctx.globalAlpha = v3; }
+      const aV = smooth(pr(te, 2.4, 3.2));
+      if (NS.free.length) {
+        const f0 = NS.free[0], f1 = NS.free[1];
+        T(ctx, '3 gyors neutron', f1.px, f1.py + 62, { f: `600 26px ${BODY}`, c: C.cy, al: aV, a: 'center' }); T(ctx, '≈ 20 000 km/s', f1.px, f1.py + 92, { f: `500 21px ${MONO}`, c: C.mut, al: aV, a: 'center' });
+        T(ctx, 'a taszítás ≈ 10 000 km/s-ra', xa - s * NS.R1 - 12, ym - 26, { f: `500 22px ${BODY}`, c: C.e, al: aV, a: 'left' }); T(ctx, 'gyorsítja a hasadványokat', xa - s * NS.R1 - 12, ym + 2, { f: `500 22px ${BODY}`, c: C.e, al: aV });
+      }
+    }
+    ctx.restore();
+  }
+}
+
+/* ════════════════ 2. jelenet: kötési energia ════════════════ */
+const BE = [[1, 0], [2, 1.11], [3, 2.7], [4, 7.07], [6, 5.33], [7, 5.61], [9, 6.46], [11, 6.93], [12, 7.68], [14, 7.48], [16, 7.98], [19, 7.78], [20, 8.03], [24, 8.26], [28, 8.45], [32, 8.49], [40, 8.55], [48, 8.72], [56, 8.79], [62, 8.79], [70, 8.74], [80, 8.70], [92, 8.63], [100, 8.58], [110, 8.53], [120, 8.49], [130, 8.43], [141, 8.36], [150, 8.29], [160, 8.21], [170, 8.13], [180, 8.05], [190, 7.97], [200, 7.90], [208, 7.86], [220, 7.74], [230, 7.63], [235, 7.59], [238, 7.57]];
+function beAt(A) { for (let i = 1; i < BE.length; i++) if (A <= BE[i][0]) { const [a0, b0] = BE[i - 1], [a1, b1] = BE[i]; return lerp(b0, b1, (A - a0) / (a1 - a0)); } return 7.57; }
+function drawB(ctx, L) {
+  const st = TT(L, 4), t = L.t, ox = 130, oy = 660, w = 1150, h = 540, X = (A) => ox + A / 250 * w, Y = (b) => oy - b / 9.4 * h;
+  const aAx = smooth(pr(st, 0, .8)); ctx.save(); ctx.globalAlpha = aAx;
+  ctx.strokeStyle = 'rgba(140,190,255,.10)'; ctx.lineWidth = 1; for (let b = 2; b <= 8; b += 2) { ctx.beginPath(); ctx.moveTo(ox, Y(b)); ctx.lineTo(ox + w, Y(b)); ctx.stroke(); T(ctx, String(b), ox - 16, Y(b) + 8, { f: `500 22px ${MONO}`, c: C.mut, a: 'right' }); }
+  for (let A = 50; A <= 250; A += 50) { ctx.beginPath(); ctx.moveTo(X(A), oy); ctx.lineTo(X(A), oy - h); ctx.stroke(); T(ctx, String(A), X(A), oy + 34, { f: `500 22px ${MONO}`, c: C.mut, a: 'center' }); }
+  ctx.strokeStyle = C.mut; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(ox, oy - h - 10); ctx.lineTo(ox, oy); ctx.lineTo(ox + w + 10, oy); ctx.stroke();
+  T(ctx, 'kötési energia nukleononként (MeV)', ox - 62, 86, { f: `500 23px ${BODY}`, c: C.mut }); T(ctx, 'tömegszám (A) →', ox + w, oy + 70, { f: `500 23px ${BODY}`, c: C.mut, a: 'right' });
+  ctx.restore();
+  // görbe
+  const pc = inOut(pr(st, .5, 2.4)); if (pc > 0) {
+    ctx.save(); ctx.beginPath(); ctx.rect(ox - 4, 0, (w + 8) * pc, 1080); ctx.clip(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    const path = () => { ctx.beginPath(); BE.forEach(([A, b], i) => i ? ctx.lineTo(X(A), Y(b)) : ctx.moveTo(X(A), Y(b))); };
+    ctx.globalCompositeOperation = 'lighter'; path(); ctx.strokeStyle = 'rgba(99,214,255,.16)'; ctx.lineWidth = 18; ctx.stroke(); path(); ctx.strokeStyle = 'rgba(99,214,255,.25)'; ctx.lineWidth = 8; ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over'; path(); ctx.strokeStyle = '#bfeeff'; ctx.lineWidth = 3.5; ctx.stroke(); ctx.restore();
+    if (pc < 1) { ctx.globalCompositeOperation = 'lighter'; glow(ctx, X(250 * pc), Y(beAt(250 * pc)), 46, '#bfeeff', .9); ctx.globalCompositeOperation = 'source-over'; }
+  }
+  const dot = (A, col, al, r = 9) => { ctx.save(); ctx.globalAlpha = al; ctx.globalCompositeOperation = 'lighter'; glow(ctx, X(A), Y(beAt(A)), 36, col, .6); ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(X(A), Y(beAt(A)), r, 0, TAU); ctx.fill(); ctx.strokeStyle = C.bg; ctx.lineWidth = 2.5; ctx.stroke(); ctx.restore(); };
+  const aFe = smooth(pr(st, 2.5, 3.1)); if (aFe > 0) { dot(56, C.ok, aFe); nuclide(ctx, X(56) - 4, Y(8.79) - 36, '56', 'Fe', 38, C.ok, 'center', aFe); T(ctx, 'a legszorosabban kötött magok', X(56) + 56, Y(8.79) - 40, { f: `400 22px ${BODY}`, c: C.mut, al: aFe }); }
+  const aHe = smooth(pr(st, 2.2, 2.8)); leader(ctx, X(4) + 4, Y(7.07) + 2, 258, 300, C.mut, aHe * .8); nuclide(ctx, 268, 314, '4', 'He', 32, C.ink, 'left', aHe);
+  const aFu = smooth(pr(st, 2.9, 3.6)); if (aFu > 0) { ctx.save(); ctx.globalAlpha = aFu; arrow(ctx, 178, 480, 232, 310, C.mut, 2.5, 12); T(ctx, 'fúzió', 250, 430, { f: `italic 500 30px ${DISP}`, c: C.ink }); T(ctx, 'könnyű magok', 250, 462, { f: `400 21px ${BODY}`, c: C.mut }); T(ctx, 'egyesülnek', 250, 488, { f: `400 21px ${BODY}`, c: C.mut }); ctx.restore(); }
+  const aU = smooth(pr(st, 3.0, 3.6)); if (aU > 0) { dot(235, C.p, aU); }
+  // nagyító
+  const aI = smooth(pr(st, 3.5, 4.3));
+  if (aI > 0) {
+    const ix = 500, iy = 290, iw = 760, ih = 325, IX = (A) => ix + 40 + (A - 60) / 190 * (iw - 80), IY = (b) => iy + ih - 44 - (b - 7.35) / 1.6 * (ih - 84);
+    ctx.save(); ctx.globalAlpha = aI;
+    const zx0 = X(62), zx1 = X(248), zy0 = Y(8.95), zy1 = Y(7.4);
+    ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(255,209,102,.6)'; ctx.lineWidth = 1.5; ctx.strokeRect(zx0, zy0, zx1 - zx0, zy1 - zy0);
+    ctx.beginPath(); ctx.moveTo(zx0, zy1); ctx.lineTo(ix, iy); ctx.moveTo(zx1, zy1); ctx.lineTo(ix + iw, iy); ctx.globalAlpha = aI * .5; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = aI;
+    rr(ctx, ix, iy, iw, ih, 16); ctx.fillStyle = 'rgba(9,14,28,.93)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,209,102,.45)'; ctx.lineWidth = 1.5; ctx.stroke();
+    T(ctx, 'NAGYÍTÁS', ix + 20, iy + 32, { f: `600 18px ${MONO}`, c: C.e });
+    ctx.save(); rr(ctx, ix, iy, iw, ih, 16); ctx.clip(); ctx.beginPath(); let first = true; for (let A = 60; A <= 240; A += 4) { const px = IX(A), py = IY(beAt(A)); first ? ctx.moveTo(px, py) : ctx.lineTo(px, py); first = false; }
+    ctx.strokeStyle = '#bfeeff'; ctx.lineWidth = 3.5; ctx.lineJoin = 'round'; ctx.stroke(); ctx.restore();
+    const idot = (A, b, col, al) => { ctx.save(); ctx.globalAlpha = aI * al; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 20; ctx.beginPath(); ctx.arc(IX(A), IY(b), 10, 0, TAU); ctx.fill(); ctx.restore(); };
+    idot(235, 7.59, C.p, 1); nuclide(ctx, IX(235) - 76, IY(7.59) + 56, '235', 'U', 36, C.p, 'center'); T(ctx, '7,6 MeV', ix + iw - 18, IY(7.59) + 54, { f: `600 22px ${MONO}`, c: C.p, a: 'right' });
+    const pa = inOut(pr(st, 4.5, 5.7));
+    if (pa > 0) {
+      for (const [A, lab, sym] of [[141, '141', 'Ba'], [92, '92', 'Kr']]) {
+        const x0 = IX(235), y0 = IY(7.59), x1 = IX(A), y1 = IY(beAt(A)), cxm = (x0 + x1) / 2, cym = Math.min(y0, y1) - 20 + 120;
+        ctx.save(); ctx.strokeStyle = C.e; ctx.lineWidth = 3; ctx.setLineDash([3, 9]); ctx.lineCap = 'round'; ctx.lineDashOffset = -t * 30; ctx.beginPath();
+        for (let q = 0; q <= 30 * pa; q++) { const u = q / 30, px = (1 - u) ** 2 * x0 + 2 * u * (1 - u) * cxm + u * u * x1, py = (1 - u) ** 2 * y0 + 2 * u * (1 - u) * cym + u * u * y1; q ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.stroke(); ctx.restore();
+        if (pa >= 1) { idot(A, beAt(A), C.e, 1); nuclide(ctx, IX(A), IY(beAt(A)) - 22, lab, sym, 34, C.e, 'center'); }
+      }
+    }
+    const aD = smooth(pr(st, 5.9, 6.6));
+    if (aD > 0) {
+      ctx.globalAlpha = aI * aD; const bx = IX(235) + 44, y0 = IY(7.59), y1 = IY(8.48);
+      ctx.strokeStyle = C.e; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx - 10, y0); ctx.lineTo(bx, y0); ctx.lineTo(bx, y1); ctx.lineTo(bx - 10, y1); ctx.stroke();
+      ctx.setLineDash([4, 6]); ctx.globalAlpha = aI * aD * .5; ctx.beginPath(); ctx.moveTo(IX(92), y1); ctx.lineTo(bx - 10, y1); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = aI * aD;
+      T(ctx, '≈ 8,5 MeV', bx + 2, y1 - 14, { f: `600 22px ${MONO}`, c: C.e, a: 'right' });
+      T(ctx, 'Δ ≈ 0,9', bx - 14, (y0 + y1) / 2 + 26, { f: `700 24px ${MONO}`, c: C.e, a: 'right' });
+    }
+    const aX = smooth(pr(st, 6.7, 7.5));
+    if (aX > 0) { T(ctx, '0,9 MeV × 236 nukleon', ix + 60, iy + ih - 78, { f: `500 27px ${MONO}`, c: C.ink, al: aX }); T(ctx, '≈ 200 MeV / hasadás', ix + 60, iy + ih - 34, { f: `700 38px ${MONO}`, c: C.e, al: aX, glow: 'rgba(255,200,80,.7)' }); }
+    ctx.restore();
+  }
+  // 1 kg urán = 2700 t szén
+  const aK = smooth(pr(st, 7.6, 8.4));
+  if (aK > 0) {
+    ctx.save(); ctx.globalAlpha = aK; const cx = 170, cy = 880, pul = .5 + .5 * Math.sin(t * 2.2);
+    ctx.globalCompositeOperation = 'lighter'; glow(ctx, cx, cy, 120 + pul * 14, '#3ad0ff', .35); ctx.globalCompositeOperation = 'source-over';
+    const cs = 27; ctx.lineJoin = 'round';
+    ctx.fillStyle = '#bcd0e6'; ctx.beginPath(); ctx.moveTo(cx - cs, cy - cs * .5); ctx.lineTo(cx, cy - cs); ctx.lineTo(cx + cs, cy - cs * .5); ctx.lineTo(cx, cy); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#7b8da6'; ctx.beginPath(); ctx.moveTo(cx - cs, cy - cs * .5); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + cs); ctx.lineTo(cx - cs, cy + cs * .5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#4d5d77'; ctx.beginPath(); ctx.moveTo(cx + cs, cy - cs * .5); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + cs); ctx.lineTo(cx + cs, cy + cs * .5); ctx.closePath(); ctx.fill();
+    T(ctx, '1 kg', cx, cy + 74, { f: `700 34px ${MONO}`, c: C.ink, a: 'center' }); T(ctx, 'urán-235 · 3,7 cm-es kocka', cx, cy + 106, { f: `400 21px ${BODY}`, c: C.mut, a: 'center' });
+    T(ctx, '=', 345, cy + 22, { f: `300 78px ${DISP}`, c: C.mut, a: 'center' });
+    const pw = pr(st, 8.4, 11.2), nW = Math.floor(27 * pw + .001);
+    for (let k = 0; k < 27; k++) {
+      const col = k % 9, row = Math.floor(k / 9), x = 420 + col * 100, y = 770 + row * 62, a = clamp(27 * pw - k); if (a <= 0) continue;
+      ctx.globalAlpha = aK * a; const dy = (1 - eOut(a)) * -14;
+      ctx.fillStyle = '#151b2b'; ctx.beginPath(); ctx.moveTo(x + 6, y + 14 + dy); ctx.quadraticCurveTo(x + 42, y - 12 + dy, x + 80, y + 14 + dy); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#3a445c'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#2a3348'; rr(ctx, x, y + 12 + dy, 86, 26, 4); ctx.fill(); ctx.strokeStyle = '#55617e'; ctx.stroke();
+      ctx.fillStyle = '#8492b0'; for (const wx of [18, 68]) { ctx.beginPath(); ctx.arc(x + wx, y + 42 + dy, 6, 0, TAU); ctx.fill(); }
+    }
+    ctx.globalAlpha = aK * smooth(pr(st, 8.4, 9));
+    T(ctx, '≈ ' + sp3(Math.round(2700 * pw / 100) * 100) + ' tonna feketeszén', 420, 1000, { f: `700 36px ${MONO}`, c: C.e });
+    T(ctx, '1 vagon = 100 t', 1310, 1000, { f: `400 21px ${BODY}`, c: C.mut, a: 'right' });
+    ctx.restore();
+  }
+}
+
+/* ════════════════ 3. jelenet: láncreakció-szimuláció ════════════════ */
+const FX0 = 60, FY0 = 150, FX1 = 900, FY1 = 1010, FCX = 480, FCY = 580, NU = 2.5;
+const RCRIT = 173;     // a szimulációban kimért kritikus sugár (px) – ld. csMeasure()
+const RODX = [202, 387, 573, 758], CORE = { x0: 110, y0: 250, x1: 850, y1: 990 };
+const CS = { mode: '', nuc: [], neu: [], fx: [], frag: [], gen: [], fates: [], hist: [], maxGen: 0, fiss: 0, ts: 1, Rf: 200, rod: .5, rodT: .5, auto: true, boom: 0, srcT: 0, histT: 0, kS: null, lnS: 0, dln: 0, started: false, autoAt: 0, rc: 11, warn: 0 };
+function csSetup(mode) {
+  Object.assign(CS, { mode, nuc: [], neu: [], fx: [], frag: [], gen: [], fates: [], hist: [], maxGen: 0, fiss: 0, ts: 1, boom: 0, srcT: 0, histT: 0, kS: null, started: false, warn: 0, dln: 0 });
+  const r = U.rng(mode === 'chain' ? 11 : mode === 'crit' ? 23 : 37);
+  if (mode === 'reactor') {
+    CS.rc = 8.6; CS.rod = CS.rodT = .56; CS.auto = true;
+    for (let y = CORE.y0 + 30; y < CORE.y1 - 16; y += 42) for (let x = CORE.x0 + 26; x < CORE.x1 - 16; x += 42) { if (RODX.some((rx) => Math.abs(x - rx) < 27)) continue; CS.nuc.push({ x: x + (r() - .5) * 8, y: y + (r() - .5) * 8, alive: true, re: 0, in: true }); }
+    for (let k = 0; k < 40; k++) { const n = CS.nuc[Math.floor(r() * CS.nuc.length)]; spawnN(n.x + 20, n.y + 20, r() * TAU, 1, false); }
+    CS.lnS = Math.log(45);
+  } else {
+    const crit = mode === 'crit', sp = crit ? 66 : 52, gn = crit ? 12 : 16; CS.rc = crit ? 10 : 11;
+    for (let j = 0; j < gn; j++) for (let i = 0; i < gn; i++) { const x = FCX + (i - (gn - 1) / 2) * sp + (r() - .5) * 20, y = FCY + (j - (gn - 1) / 2) * sp + (r() - .5) * 20; CS.nuc.push({ x, y, alive: true, re: 0, in: true, d: Math.hypot(x - FCX, y - FCY) }); }
+    if (mode === 'crit') setRf(CS.Rf);
+  }
+}
+function setRf(Rf) { CS.Rf = Rf; for (const n of CS.nuc) n.in = n.d <= Rf; CS.fates = []; CS.kS = null; }
+function spawnN(x, y, a, gen, fast) { const v = CS.mode === 'reactor' ? (fast ? 640 : 230) : 300; const n = { x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, gen, age: fast ? 0 : 9, fast, dead: false, leak: false }; CS.neu.push(n); return n; }
+function fate(f) { CS.fates.push(f); if (CS.fates.length > 300) CS.fates.shift(); }
+function fission(nuc, n) {
+  const crit = CS.mode === 'crit'; if (!crit) { nuc.alive = false; nuc.re = CS.mode === 'chain' ? 1e9 : .9; } CS.fiss++; n.dead = true; fate(1);
+  const g = n.gen; CS.gen[g] = (CS.gen[g] || 0) + 1; CS.maxGen = Math.max(CS.maxGen, g);
+  CS.fx.push({ x: nuc.x, y: nuc.y, t: 0 }); const a0 = Math.random() * TAU;
+  if (!crit && CS.frag.length < 160) CS.frag.push({ x: nuc.x, y: nuc.y, a: a0, t: 0 });
+  const k = Math.random() < .5 ? 2 : 3; if (CS.neu.length < 520) for (let i = 0; i < k; i++) { const a = a0 + 1.2 + (i + Math.random() * .8) * TAU / k, o = CS.rc + 3; spawnN(nuc.x + Math.cos(a) * o, nuc.y + Math.sin(a) * o, a, g + 1, CS.mode === 'reactor'); }
+}
+function launchChain() { const tg = CS.nuc.reduce((b, n) => (n.alive && Math.hypot(n.x - FCX, n.y - FCY) < Math.hypot(b.x - FCX, b.y - FCY) ? n : b)); const n = spawnN(FX0 - 30, tg.y, 0, 1, false); n.target = tg; n.vx = 330; n.vy = 0; CS.started = true; }
+function csUpdate(dt0) {
+  const mode = CS.mode; if (!mode) return;
+  if (mode === 'chain') { const tg = CS.started && CS.maxGen < 3 ? .42 : 1; CS.ts += (tg - CS.ts) * Math.min(1, dt0 * 1.6); } else CS.ts = 1;
+  if (CS.boom > 0) { CS.boom -= dt0; if (CS.boom <= 0) { CS.neu = []; CS.fates = []; CS.kS = null; for (const n of CS.nuc) { n.alive = true; n.re = 0; } } }
+  const dt = dt0 * CS.ts / 2, rc2 = CS.rc * CS.rc, re = mode === 'reactor';
+  if (re) {
+    if (CS.auto) { const ln = Math.log(CS.neu.length + 6), tgt = Math.log(70 + 6); const d = (ln - CS.lnS); CS.lnS += d * Math.min(1, dt0 * 4); CS.dln += (d * 4 - CS.dln) * Math.min(1, dt0 * 3); CS.rodT = clamp(CS.rodT + (.14 * (ln - tgt) + .42 * CS.dln) * dt0, .05, 1); }
+    CS.rod += clamp(CS.rodT - CS.rod, -dt0 * .9, dt0 * .9);
+  }
+  const rodY = CORE.y0 + CS.rod * (CORE.y1 - CORE.y0 - 6);
+  for (let sub = 0; sub < 2; sub++) {
+    const cur = CS.neu, len = cur.length;
+    for (let q = 0; q < len; q++) {
+      const n = cur[q]; if (n.dead) continue;
+      n.age += dt;
+      if (re && n.fast && n.age > .17) { const v = Math.hypot(n.vx, n.vy), tv = 230; if (v > tv + 4) { const f = Math.max(tv / v, 1 - dt * 14); n.vx *= f; n.vy *= f; } else n.fast = false; }
+      n.x += n.vx * dt; n.y += n.vy * dt;
+      if (n.target) { if (n.x >= n.target.x - CS.rc) { fission(n.target, n); } continue; }
+      if (n.leak) { if (n.x < FX0 - 40 || n.x > FX1 + 40 || n.y < FY0 - 40 || n.y > FY1 + 40) n.dead = true; continue; }
+      if (re) {
+        if (n.x < CORE.x0 || n.x > CORE.x1 || n.y < CORE.y0 || n.y > CORE.y1) { n.dead = true; fate(0); continue; }
+        if (!n.fast && n.y < rodY) { let hit = false; for (const rx of RODX) if (Math.abs(n.x - rx) < 11) { hit = true; break; } if (hit) { n.dead = true; fate(0); CS.fx.push({ x: n.x, y: n.y, t: 0, abs: true }); continue; } }
+        if (n.fast) continue;
+      } else if (mode === 'crit') { if (Math.hypot(n.x - FCX, n.y - FCY) > CS.Rf + 16) { n.leak = true; fate(0); continue; } }
+      else if (n.x < FX0 || n.x > FX1 || n.y < FY0 || n.y > FY1) { n.dead = true; fate(0); continue; }
+      const nuc = CS.nuc;
+      for (let i = 0; i < nuc.length; i++) { const u = nuc[i]; if (!u.alive || !u.in) continue; const dx = u.x - n.x; if (dx > 11 || dx < -11) continue; const dy = u.y - n.y; if (dx * dx + dy * dy < rc2) { fission(u, n); break; } }
+    }
+  }
+  CS.neu = CS.neu.filter((n) => !n.dead);
+  const dts = dt0 * CS.ts;
+  for (const u of CS.nuc) if (!u.alive && u.re < 1e8) { u.re -= dts; if (u.re <= 0) { u.alive = true; u.born = 0; } }
+  for (const f of CS.fx) f.t += dts; CS.fx = CS.fx.filter((f) => f.t < .7);
+  for (const f of CS.frag) f.t += dts; if (mode !== 'chain') CS.frag = CS.frag.filter((f) => f.t < .9);
+  // neutronforrás
+  if (mode !== 'chain' && CS.boom <= 0) { CS.srcT -= dt0; const live = CS.neu.reduce((s, n) => s + (n.leak ? 0 : 1), 0); if (CS.srcT <= 0 && live < 4) { CS.srcT = mode === 'crit' ? .55 : .35; if (re) { const u = CS.nuc[Math.floor(Math.random() * CS.nuc.length)]; spawnN(u.x + 18, u.y + 18, Math.random() * TAU, 1, false); } else spawnN(FCX, FCY, Math.random() * TAU, 1, false); } }
+  // megszaladás
+  if (mode === 'crit' && CS.boom <= 0 && CS.neu.reduce((s, n) => s + (n.leak ? 0 : 1), 0) > 230) CS.boom = 1.7;
+  if (re && CS.neu.length > 330 && CS.rodT < 1) { CS.auto = false; CS.rodT = 1; CS.warn = 3.5; if (CS.onScram) CS.onScram(); }
+  if (CS.warn > 0) CS.warn -= dt0;
+  // k becslés + idősor
+  if (CS.fates.length >= 14) { const k = NU * CS.fates.reduce((a, b) => a + b, 0) / CS.fates.length; CS.kS = CS.kS == null ? k : CS.kS + (k - CS.kS) * Math.min(1, dt0 * 2.5); }
+  CS.histT -= dt0; if (CS.histT <= 0) { CS.histT = .1; CS.hist.push(CS.neu.reduce((s, n) => s + (n.leak ? 0 : 1), 0)); if (CS.hist.length > 230) CS.hist.shift(); }
+}
+/* statikus Monte-Carlo k-mérés (kalibráláshoz; a konzolból hívható) */
+window.csMeasure = function (Rf, trials = 4000) {
+  const sp = 66, r = U.rng(23), nuc = []; for (let j = 0; j < 12; j++) for (let i = 0; i < 12; i++) { const x = FCX + (i - 5.5) * sp + (r() - .5) * 20, y = FCY + (j - 5.5) * sp + (r() - .5) * 20; if (Math.hypot(x - FCX, y - FCY) <= Rf) nuc.push([x, y]); }
+  let hit = 0; for (let k = 0; k < trials; k++) { const s = nuc[Math.floor(Math.random() * nuc.length)], a = Math.random() * TAU; let x = s[0], y = s[1], ok = false; for (let q = 0; q < 400 && !ok; q++) { x += Math.cos(a) * 2.5; y += Math.sin(a) * 2.5; if (Math.hypot(x - FCX, y - FCY) > Rf + 16) break; for (const u of nuc) if (u !== s && (u[0] - x) ** 2 + (u[1] - y) ** 2 < 100) { ok = true; break; } } if (ok) hit++; }
+  return NU * hit / trials;
+};
+
+function drawNeutrons(ctx) {
+  ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+  for (const n of CS.neu) {
+    const v = Math.hypot(n.vx, n.vy) || 1, L2 = n.fast ? 34 : 15, ux = n.vx / v, uy = n.vy / v, al = n.leak ? .35 : 1;
+    ctx.strokeStyle = n.fast ? `rgba(255,236,170,${.8 * al})` : `rgba(120,220,255,${.75 * al})`; ctx.lineWidth = n.fast ? 3 : 4; ctx.beginPath(); ctx.moveTo(n.x - ux * L2, n.y - uy * L2); ctx.lineTo(n.x, n.y); ctx.stroke();
+    ctx.fillStyle = n.fast ? `rgba(255,250,225,${al})` : `rgba(215,245,255,${al})`; ctx.beginPath(); ctx.arc(n.x, n.y, n.fast ? 3.4 : 4.4, 0, TAU); ctx.fill();
+  }
+  for (const f of CS.fx) { const p = f.t / .7; if (f.abs) { glow(ctx, f.x, f.y, 22, '#b48cff', .6 * (1 - p)); continue; } glow(ctx, f.x, f.y, 30 + p * 50, '#ffe9a8', .95 * (1 - p) ** 2); ctx.strokeStyle = `rgba(255,209,102,${.6 * (1 - p) ** 2})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(f.x, f.y, 10 + p * 32, 0, TAU); ctx.stroke(); }
+  ctx.globalCompositeOperation = 'source-over';
+}
+function drawNuclei(ctx, t, dt) {
+  for (const u of CS.nuc) {
+    if (!u.in) { ctx.globalAlpha = .07; ctx.drawImage(MINI_DEAD, u.x - 16, u.y - 16, 32, 32); ctx.globalAlpha = 1; continue; }
+    if (u.alive) { let sc = 1; if (u.born !== undefined && u.born < 1) { u.born += dt * 3; sc = clamp(u.born); } const r = 17 * sc; ctx.globalAlpha = sc; ctx.drawImage(MINI, u.x - r, u.y - r, r * 2, r * 2); ctx.globalAlpha = 1; }
+  }
+  for (const f of CS.frag) { const d = 4 + 13 * eOut(f.t / .8), al = CS.mode === 'chain' ? lerp(1, .5, clamp(f.t / 2)) : 1 - clamp(f.t / .9); ctx.globalAlpha = al; for (const sg of [-1, 1]) ctx.drawImage(MINI_DEAD, f.x + Math.cos(f.a) * d * sg - 9, f.y + Math.sin(f.a) * d * sg - 9, 18, 18); }
+  ctx.globalAlpha = 1;
+}
+function readout(ctx, x, y, label, val, col, size = 54) { T(ctx, label, x, y, { f: `500 20px ${MONO}`, c: C.mut }); T(ctx, val, x, y + size, { f: `700 ${size}px ${MONO}`, c: col }); }
+function histGraph(ctx, x, y, w, h, title, target) {
+  card(ctx, x, y, w, h); T(ctx, title, x + 20, y + 34, { f: `500 20px ${MONO}`, c: C.mut });
+  const gx = x + 20, gy = y + 54, gw = w - 40, gh = h - 76, mx = Math.max(60, ...CS.hist) * 1.12;
+  ctx.strokeStyle = 'rgba(140,190,255,.14)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(gx, gy + gh); ctx.lineTo(gx + gw, gy + gh); ctx.stroke();
+  if (target) { const ty = gy + gh - target / mx * gh; ctx.setLineDash([5, 6]); ctx.strokeStyle = rgba(C.ok, .7); ctx.beginPath(); ctx.moveTo(gx, ty); ctx.lineTo(gx + gw, ty); ctx.stroke(); ctx.setLineDash([]); T(ctx, 'cél', gx + gw, ty - 8, { f: `500 18px ${MONO}`, c: C.ok, a: 'right' }); }
+  if (CS.hist.length > 1) {
+    ctx.save(); ctx.beginPath(); CS.hist.forEach((v, i) => { const px = gx + i / 229 * gw, py = gy + gh - v / mx * gh; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+    ctx.strokeStyle = C.e; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.shadowColor = C.e; ctx.shadowBlur = 12; ctx.stroke(); ctx.shadowBlur = 0;
+    const lx = gx + (CS.hist.length - 1) / 229 * gw; ctx.lineTo(lx, gy + gh); ctx.lineTo(gx, gy + gh); ctx.closePath(); const g = ctx.createLinearGradient(0, gy, 0, gy + gh); g.addColorStop(0, 'rgba(255,209,102,.28)'); g.addColorStop(1, 'rgba(255,209,102,0)'); ctx.fillStyle = g; ctx.fill(); ctx.restore();
+  }
+}
+function kCard(ctx, x, y, w, t) {
+  card(ctx, x, y, w, 250); const k = CS.kS; T(ctx, 'SOKSZOROZÁSI TÉNYEZŐ', x + 20, y + 36, { f: `500 20px ${MONO}`, c: C.mut });
+  let col = C.mut, lab = 'mérés…', sub = '';
+  if (k != null) { if (k < .93) { col = C.cy; lab = 'szubkritikus'; sub = 'a láncreakció elhal'; } else if (k <= 1.08) { col = C.ok; lab = 'kritikus'; sub = 'állandó ütemű hasadás'; } else { col = C.bad; lab = 'szuperkritikus'; sub = 'a reakció megszalad'; } }
+  T(ctx, 'k', x + 22, y + 128, { f: `italic 500 76px ${DISP}`, c: col }); T(ctx, '=', x + 78, y + 124, { f: `300 60px ${DISP}`, c: C.mut });
+  T(ctx, k == null ? '–' : hu(k, 2), x + 130, y + 130, { f: `700 84px ${MONO}`, c: col, glow: k != null ? col : null, blur: 18 });
+  T(ctx, lab, x + 22, y + 186, { f: `600 34px ${DISP}`, c: col }); T(ctx, sub, x + 22, y + 220, { f: `400 22px ${BODY}`, c: C.mut });
+}
+function drawC(ctx, L) {
+  const want = L.step === 5 ? 'chain' : L.step === 6 ? 'crit' : L.step === 7 ? 'reactor' : CS.mode; if (!want) return;
+  if (CS.mode !== want) csSetup(want);
+  if (L.step >= 5 && L.step <= 7) { if (CS.mode === 'chain' && !CS.started && L.st > CS.autoAt) launchChain(); csUpdate(L.dt); }
+  const t = L.t, mode = CS.mode, a0 = smooth(pr(L.step >= 5 && L.step <= 7 ? L.st : 9, 0, .7));
+  ctx.save();
+  if (mode === 'reactor') drawReactor(ctx, L); else {
+    // mező kerete
+    ctx.strokeStyle = 'rgba(140,190,255,.14)'; ctx.lineWidth = 1.2; rr(ctx, FX0, FY0, FX1 - FX0, FY1 - FY0, 22); ctx.stroke();
+    for (const [x, y, sx, sy] of [[FX0, FY0, 1, 1], [FX1, FY0, -1, 1], [FX0, FY1, 1, -1], [FX1, FY1, -1, -1]]) { ctx.strokeStyle = rgba(C.cy, .6); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + sx * 34, y); ctx.lineTo(x + sx * 12, y); ctx.moveTo(x, y + sy * 34); ctx.lineTo(x, y + sy * 12); ctx.stroke(); }
+    if (mode === 'crit') {
+      ctx.globalCompositeOperation = 'lighter'; glow(ctx, FCX, FCY, CS.Rf * 1.5, '#2b7dff', .16); ctx.globalCompositeOperation = 'source-over';
+      ctx.setLineDash([8, 8]); ctx.lineDashOffset = -t * 12; ctx.strokeStyle = rgba(C.cy, .7); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(FCX, FCY, CS.Rf + 16, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = rgba(C.ok, .45); ctx.lineWidth = 1.5; ctx.setLineDash([2, 10]); ctx.beginPath(); ctx.arc(FCX, FCY, RCRIT + 16, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+      T(ctx, 'kritikus méret', FCX + (RCRIT + 16) * .71 + 10, FCY - (RCRIT + 16) * .71 - 6, { f: `500 20px ${MONO}`, c: rgba(C.ok, .85) });
+    }
+    drawNuclei(ctx, t, L.dt); drawNeutrons(ctx);
+    if (mode === 'chain') T(ctx, 'URÁN-235 TÖMB · MINDEN PÖTTY EGY ATOMMAG', FX0 + 6, FY0 - 22, { f: `500 20px ${MONO}`, c: C.mut, al: a0 });
+    else { T(ctx, 'URÁN-235 GÖMB KERESZTMETSZETE', FX0 + 6, FY0 - 22, { f: `500 20px ${MONO}`, c: C.mut, al: a0 }); T(ctx, 'a halvány csíkok: kiszökő neutronok', FX1 - 6, FY0 - 22, { f: `400 20px ${BODY}`, c: C.mut, a: 'right', al: a0 }); }
+    if (CS.boom > 0) { const p = 1 - CS.boom / 1.7; ctx.globalCompositeOperation = 'lighter'; glow(ctx, FCX, FCY, 300 + p * 700, '#fff0c0', .9 * (1 - p)); ctx.globalCompositeOperation = 'source-over'; T(ctx, 'MEGSZALADT!', FCX, FCY + 20, { f: `700 84px ${DISP}`, c: '#fff', a: 'center', al: clamp(p * 5) * (1 - p * .5), glow: C.bad, blur: 40 }); }
+  }
+  // jobb oszlop
+  const cx = 940, cw = 390; ctx.globalAlpha = a0;
+  if (mode === 'chain') {
+    card(ctx, cx, 150, cw, 300);
+    readout(ctx, cx + 22, 190, 'GENERÁCIÓ', String(CS.maxGen), C.e, 72); readout(ctx, cx + 210, 190, 'HASADÁS', String(CS.fiss), C.ink, 72);
+    readout(ctx, cx + 22, 330, 'SZABAD NEUTRON', String(CS.neu.length), C.cy, 64);
+    T(ctx, '≈ ' + sp3(CS.fiss * 200) + ' MeV', cx + cw - 22, 416, { f: `600 24px ${MONO}`, c: C.e, a: 'right' });
+    card(ctx, cx, 474, cw, 536); T(ctx, 'HASADÁSOK GENERÁCIÓNKÉNT', cx + 20, 510, { f: `500 20px ${MONO}`, c: C.mut });
+    const gens = CS.gen.slice(1), n = Math.max(7, gens.length), mx = Math.max(9, ...gens.map((v) => v || 0)), bw = (cw - 50) / n, by = 960, bh = 380;
+    for (let i = 0; i < n; i++) {
+      const v = gens[i] || 0, h = v / mx * bh, x = cx + 25 + i * bw; u2 = CS.dispG || (CS.dispG = []); u2[i] = (u2[i] || 0) + (h - (u2[i] || 0)) * .15;
+      const g = ctx.createLinearGradient(0, by - u2[i], 0, by); g.addColorStop(0, C.e); g.addColorStop(1, 'rgba(255,122,85,.55)'); ctx.fillStyle = g; rr(ctx, x + 4, by - u2[i], bw - 8, u2[i] + .5, 5); ctx.fill();
+      if (n <= 10 || i % 2 === 0) T(ctx, String(i + 1), x + bw / 2, by + 30, { f: `500 20px ${MONO}`, c: C.mut, a: 'center' }); if (v && (n <= 10 || v >= mx * .12)) T(ctx, String(v), x + bw / 2, by - u2[i] - 10, { f: `700 ${n > 10 ? 19 : 22}px ${MONO}`, c: C.ink, a: 'center' });
+    }
+    if (!CS.started) T(ctx, '← indítsd el a neutront', cx + cw / 2, 740, { f: `italic 400 28px ${DISP}`, c: C.mut, a: 'center', al: .6 + .4 * Math.sin(t * 3) });
+  } else {
+    kCard(ctx, cx, 150, cw, t);
+    histGraph(ctx, cx, 424, cw, 330, mode === 'reactor' ? 'NEUTRONSZÁM ≈ TELJESÍTMÉNY' : 'SZABAD NEUTRONOK SZÁMA', mode === 'reactor' ? 70 : 0);
+    card(ctx, cx, 778, cw, 232);
+    if (mode === 'crit') {
+      const m = 52 * (CS.Rf / RCRIT) ** 3; readout(ctx, cx + 22, 818, 'AZ URÁNGÖMB TÖMEGE', '≈ ' + (m < 20 ? hu(m, 1) : Math.round(m)) + ' kg', C.ink, 56);
+      T(ctx, 'kritikus tömeg ≈ 52 kg', cx + 22, 930, { f: `600 24px ${MONO}`, c: C.ok }); T(ctx, 'csupasz, tiszta urán-235 gömbre', cx + 22, 962, { f: `400 21px ${BODY}`, c: C.mut }); T(ctx, '(kb. 17 cm átmérő)', cx + 22, 990, { f: `400 21px ${BODY}`, c: C.mut });
+    } else {
+      readout(ctx, cx + 22, 818, 'RUDAK BENYÚLÁSA', Math.round(CS.rod * 100) + ' %', C.ink, 56);
+      ctx.strokeStyle = 'rgba(255,236,170,.9)'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(cx + 24, 926); ctx.lineTo(cx + 62, 926); ctx.stroke(); T(ctx, 'gyors neutron – nem hasít', cx + 78, 934, { f: `400 22px ${BODY}`, c: C.ink });
+      ctx.fillStyle = '#bfeeff'; ctx.beginPath(); ctx.arc(cx + 54, 964, 6, 0, TAU); ctx.fill(); T(ctx, 'lassú neutron – hasít', cx + 78, 972, { f: `400 22px ${BODY}`, c: C.ink });
+      T(ctx, CS.auto ? '● automata' : '○ kézi', cx + cw - 22, 872, { f: `500 18px ${MONO}`, c: CS.auto ? C.ok : C.mut, a: 'right' });
+    }
+  }
+  ctx.restore();
+}
+let u2;
+function drawReactor(ctx, L) {
+  const t = L.t, { x0, y0, x1, y1 } = CORE;
+  // tartály + víz
+  rr(ctx, x0 - 22, y0 - 22, x1 - x0 + 44, y1 - y0 + 44, 34); ctx.fillStyle = '#0a1326'; ctx.fill(); ctx.strokeStyle = '#3b4a68'; ctx.lineWidth = 6; ctx.stroke();
+  const wg = ctx.createLinearGradient(0, y0, 0, y1); wg.addColorStop(0, 'rgba(40,120,220,.26)'); wg.addColorStop(1, 'rgba(20,70,170,.20)'); rr(ctx, x0, y0, x1 - x0, y1 - y0, 16); ctx.fillStyle = wg; ctx.fill();
+  ctx.save(); rr(ctx, x0, y0, x1 - x0, y1 - y0, 16); ctx.clip();
+  ctx.globalCompositeOperation = 'lighter'; glow(ctx, (x0 + x1) / 2, (y0 + y1) / 2, 520, '#2b8cff', clamp(.08 + CS.neu.length / 900, 0, .34));
+  for (let k = 0; k < 26; k++) { const bx = x0 + ((k * 137.5) % (x1 - x0)), by = y1 - ((t * (26 + k % 7 * 6) + k * 91) % (y1 - y0)); ctx.fillStyle = 'rgba(160,215,255,.13)'; ctx.beginPath(); ctx.arc(bx + Math.sin(t * 1.5 + k) * 5, by, 2 + k % 3, 0, TAU); ctx.fill(); }
+  ctx.globalCompositeOperation = 'source-over';
+  drawNuclei(ctx, t, L.dt); drawNeutrons(ctx); ctx.restore();
+  // rudak
+  const rodY = y0 + CS.rod * (y1 - y0 - 6);
+  for (const rx of RODX) {
+    ctx.fillStyle = '#2a3145'; ctx.fillRect(rx - 5, 150, 10, y0 - 150);
+    const g = ctx.createLinearGradient(rx - 11, 0, rx + 11, 0); g.addColorStop(0, '#3a2f55'); g.addColorStop(.45, '#a58fd8'); g.addColorStop(1, '#3a2f55');
+    ctx.fillStyle = g; rr(ctx, rx - 11, y0 - 16, 22, rodY - y0 + 16, 6); ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = '#55617e'; rr(ctx, rx - 20, 150 + CS.rod * 40, 40, 18, 5); ctx.fill();
+  }
+  T(ctx, 'SZABÁLYOZÓRUDAK (BÓR)', x0, 130, { f: `500 20px ${MONO}`, c: '#b9a6ea' });
+  T(ctx, 'VÍZ = MODERÁTOR + HŰTŐKÖZEG', x1, 130, { f: `500 20px ${MONO}`, c: C.cy, a: 'right' });
+  T(ctx, 'fűtőelemek (urán)', x0 + 8, y1 + 48, { f: `400 21px ${BODY}`, c: C.mut });
+  if (CS.warn > 0) { const a = clamp(CS.warn) * (.7 + .3 * Math.sin(t * 14)); T(ctx, 'VÉSZLEÁLLÍTÁS – a rudak beesnek', (x0 + x1) / 2, (y0 + y1) / 2, { f: `700 44px ${DISP}`, c: '#fff', a: 'center', al: a, glow: C.bad, blur: 30 }); }
+}
+
+/* ════════════════ 4. jelenet: atomerőmű ════════════════ */
+function plen(p) { let s = 0; for (let i = 1; i < p.length; i++) s += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return s; }
+function pat(p, d) { for (let i = 1; i < p.length; i++) { const l = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); if (d <= l) return [lerp(p[i - 1][0], p[i][0], d / l), lerp(p[i - 1][1], p[i][1], d / l)]; d -= l; } return p[p.length - 1]; }
+function pipe(ctx, p, col, w, al) { ctx.save(); ctx.globalAlpha *= al; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath(); p.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.strokeStyle = '#0a1020'; ctx.lineWidth = w + 6; ctx.stroke(); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke(); ctx.restore(); }
+function flow(ctx, p, col, t, speed, gap, r, al) { if (al <= 0) return; const len = plen(p); ctx.save(); ctx.globalAlpha *= al; ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = col; for (let d = (t * speed) % gap; d < len; d += gap) { const [x, y] = pat(p, d); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); } ctx.restore(); }
+function drawD(ctx, L) {
+  const st = TT(L, 8), t = L.t, A = (k) => smooth(pr(st, k * .8, k * .8 + .9));
+  T(ctx, 'Nyomottvizes atomerőmű', 60, 96, { f: `560 50px ${DISP}`, c: C.ink, al: A(0) }); T(ctx, 'PAKS · 4 × VVER-440 BLOKK', 62, 134, { f: `500 21px ${MONO}`, c: C.mut, al: A(0) });
+  // hermetikus tér
+  const a1 = A(0); ctx.save(); ctx.globalAlpha = a1; rr(ctx, 60, 190, 520, 640, 60); ctx.fillStyle = 'rgba(16,24,44,.75)'; ctx.fill(); ctx.strokeStyle = '#46557a'; ctx.lineWidth = 5; ctx.stroke(); T(ctx, 'HERMETIKUS VÉDŐÉPÜLET', 100, 800, { f: `500 19px ${MONO}`, c: C.mut }); ctx.restore();
+  // csövek
+  const hot = [[280, 440], [400, 440], [432, 440], [432, 330], [476, 330], [476, 560]], cold = [[476, 560], [476, 610], [340, 610], [280, 610]];
+  const steam = [[454, 262], [454, 226], [700, 226], [700, 250]], exh = [[800, 320], [800, 470]], feed = [[800, 590], [800, 690], [640, 690], [640, 600], [520, 600]];
+  const cin = [[900, 880], [900, 560], [740, 560]], cout = [[740, 510], [1000, 510], [1000, 880]];
+  const a2 = A(1), a3 = A(2), a4 = A(3), a5 = A(5), a6 = A(4);
+  pipe(ctx, steam, '#9fb0c8', 12, a4); pipe(ctx, exh, '#7f93b3', 16, a5); pipe(ctx, feed, '#3f78c8', 10, a5); pipe(ctx, cin, '#1f5fb8', 10, a5); pipe(ctx, cout, '#3f8fd0', 10, a5);
+  // gőzfejlesztő
+  ctx.save(); ctx.globalAlpha = a3; rr(ctx, 396, 262, 120, 380, 58); const sg = ctx.createLinearGradient(0, 262, 0, 642); sg.addColorStop(0, '#39445f'); sg.addColorStop(.45, '#26314b'); sg.addColorStop(1, '#1b3a6a'); ctx.fillStyle = sg; ctx.fill(); ctx.strokeStyle = '#6b7ba0'; ctx.lineWidth = 3; ctx.stroke();
+  for (let k = 0; k < 7; k++) { const bx = 410 + (k * 37) % 92, by = 420 - ((t * 40 + k * 53) % 130); ctx.fillStyle = `rgba(220,235,255,${.35 * (1 - (420 - by) / 130)})`; ctx.beginPath(); ctx.arc(bx, by, 4 + k % 3, 0, TAU); ctx.fill(); }
+  ctx.restore();
+  pipe(ctx, hot, '#d8452e', 12, a2); pipe(ctx, cold, '#8a3a6e', 12, a2);
+  // reaktortartály
+  ctx.save(); ctx.globalAlpha = a1; rr(ctx, 140, 330, 140, 400, 62); ctx.fillStyle = '#1a2238'; ctx.fill(); ctx.strokeStyle = '#7384a8'; ctx.lineWidth = 4; ctx.stroke();
+  ctx.globalCompositeOperation = 'lighter'; glow(ctx, 210, 590, 150, '#39b8ff', .5 + .1 * Math.sin(t * 3)); glow(ctx, 210, 590, 70, '#ffffff', .25); ctx.globalCompositeOperation = 'source-over';
+  for (let k = 0; k < 6; k++) { ctx.fillStyle = '#ffb36b'; rr(ctx, 163 + k * 17, 510, 9, 170, 3); ctx.fill(); }
+  for (let k = 0; k < 3; k++) { ctx.fillStyle = '#a58fd8'; rr(ctx, 176 + k * 30, 380, 8, 150 + Math.sin(t * .7) * 8, 3); ctx.fill(); ctx.fillStyle = '#55617e'; ctx.fillRect(178 + k * 30, 300, 4, 82); }
+  ctx.restore();
+  // szivattyú
+  ctx.save(); ctx.globalAlpha = a2; ctx.fillStyle = '#26314b'; ctx.strokeStyle = '#7384a8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(350, 610, 22, 0, TAU); ctx.fill(); ctx.stroke(); ctx.translate(350, 610); ctx.rotate(-t * 5); ctx.strokeStyle = C.ink; for (let k = 0; k < 3; k++) { ctx.rotate(TAU / 3); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(15, 0); ctx.stroke(); } ctx.restore();
+  flow(ctx, hot, '#ffb09a', t, 90, 34, 4, a2); flow(ctx, cold, '#e39ad0', t, 90, 34, 4, a2);
+  flow(ctx, steam, '#ffffff', t, 150, 26, 4, a4 * .9);
+  // turbina
+  ctx.save(); ctx.globalAlpha = a4; ctx.beginPath(); ctx.moveTo(670, 250); ctx.lineTo(730, 250); ctx.lineTo(880, 205); ctx.lineTo(880, 345); ctx.lineTo(730, 320); ctx.lineTo(670, 320); ctx.closePath(); ctx.fillStyle = '#222c44'; ctx.fill(); ctx.strokeStyle = '#7384a8'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.save(); ctx.beginPath(); ctx.moveTo(672, 252); ctx.lineTo(730, 252); ctx.lineTo(878, 208); ctx.lineTo(878, 342); ctx.lineTo(730, 318); ctx.lineTo(672, 318); ctx.closePath(); ctx.clip();
+  for (let k = 0; k < 6; k++) { const bx = 690 + k * 34, hh = 26 + k * 8.5, ph = Math.sin(t * 9 + k * .9); ctx.fillStyle = `rgba(190,210,240,${.5 + .3 * ph})`; ctx.fillRect(bx - 3, 285 - hh * Math.abs(ph), 6, hh * 2 * Math.abs(ph)); ctx.fillStyle = 'rgba(190,210,240,.25)'; ctx.fillRect(bx - 1, 285 - hh, 2, hh * 2); }
+  ctx.restore(); ctx.fillStyle = '#9fb0c8'; ctx.fillRect(880, 279, 60, 12); ctx.restore();
+  // generátor + távvezeték
+  ctx.save(); ctx.globalAlpha = a6; rr(ctx, 940, 225, 150, 120, 20); ctx.fillStyle = '#2a2414'; ctx.fill(); ctx.strokeStyle = C.e; ctx.lineWidth = 3; ctx.stroke();
+  ctx.globalCompositeOperation = 'lighter'; glow(ctx, 1015, 285, 120, C.e, .22 + .08 * Math.sin(t * 6)); ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = C.e; ctx.beginPath(); ctx.moveTo(1024, 244); ctx.lineTo(996, 292); ctx.lineTo(1014, 292); ctx.lineTo(1004, 328); ctx.lineTo(1036, 278); ctx.lineTo(1018, 278); ctx.closePath(); ctx.fill();
+  const px = 1230, py = 150; ctx.strokeStyle = '#7384a8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(px - 34, 400); ctx.lineTo(px - 8, py); ctx.lineTo(px + 8, py); ctx.lineTo(px + 34, 400); ctx.moveTo(px - 54, py + 40); ctx.lineTo(px + 54, py + 40); ctx.moveTo(px - 44, py + 96); ctx.lineTo(px + 44, py + 96); ctx.moveTo(px - 28, 330); ctx.lineTo(px + 22, 250); ctx.moveTo(px + 28, 330); ctx.lineTo(px - 22, 250); ctx.stroke();
+  const wire = [[1090, 262], [1140, 215], [px - 54, py + 40]], wire2 = [[px + 54, py + 40], [1345, 230]];
+  ctx.strokeStyle = 'rgba(255,209,102,.5)'; ctx.lineWidth = 2; for (const w of [wire, wire2]) { ctx.beginPath(); w.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke(); }
+  ctx.restore(); flow(ctx, wire, '#fff3c0', t, 260, 60, 5, a6); flow(ctx, wire2, '#fff3c0', t, 260, 60, 5, a6);
+  // kondenzátor + Duna
+  ctx.save(); ctx.globalAlpha = a5; rr(ctx, 720, 470, 160, 120, 18); ctx.fillStyle = '#16284a'; ctx.fill(); ctx.strokeStyle = '#6b8fc8'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.strokeStyle = '#3f8fd0'; ctx.lineWidth = 4; ctx.beginPath(); for (let k = 0; k < 3; k++) { const yy = 500 + k * 28; ctx.moveTo(740, yy); for (let q = 0; q <= 6; q++) ctx.lineTo(740 + q * 20, yy + (q % 2 ? 9 : -9)); } ctx.stroke();
+  ctx.beginPath(); ctx.arc(640, 690, 20, 0, TAU); ctx.fillStyle = '#26314b'; ctx.fill(); ctx.strokeStyle = '#7384a8'; ctx.lineWidth = 3; ctx.stroke();
+  // Duna
+  ctx.beginPath(); ctx.moveTo(800, 1080); for (let x = 840; x <= 1920; x += 20) ctx.lineTo(x, 888 + Math.sin(x * .02 + t * 1.4) * 6 + Math.sin(x * .05 - t) * 3); ctx.lineTo(1920, 1080); ctx.closePath();
+  const rg = ctx.createLinearGradient(0, 880, 0, 1080); rg.addColorStop(0, 'rgba(40,120,220,.55)'); rg.addColorStop(1, 'rgba(10,40,110,.25)'); ctx.fillStyle = rg; ctx.fill();
+  T(ctx, 'Duna', 1150, 990, { f: `italic 500 54px ${DISP}`, c: 'rgba(190,225,255,.75)' }); T(ctx, 'hűtővíz – a reaktor vizével sosem keveredik', 1310, 1030, { f: `400 21px ${BODY}`, c: 'rgba(190,225,255,.7)', a: 'right' });
+  ctx.restore();
+  flow(ctx, exh, '#dfe9ff', t, 120, 26, 4, a5 * .7); flow(ctx, feed, '#7fb4ff', t, 90, 32, 4, a5); flow(ctx, cin, '#6aa8ff', t, 100, 32, 4, a5); flow(ctx, cout, '#a8d4ff', t, 100, 32, 4, a5);
+  // feliratok
+  const lab = (s1, s2, x, y, col, al, a = 'left') => { T(ctx, s1, x, y, { f: `600 27px ${BODY}`, c: col, al, a }); if (s2) T(ctx, s2, x, y + 28, { f: `500 19px ${MONO}`, c: C.mut, al, a }); };
+  lab('reaktor', 'hasadás → hő', 96, 244, C.cy, a1);
+  lab('primer kör', '123 bar', 296, 506, '#ff8f7a', a2); T(ctx, '≈ 300 °C', 296, 560, { f: `500 19px ${MONO}`, c: C.mut, al: a2 }); T(ctx, 'nagy nyomás → nem forr fel', 296, 712, { f: `500 19px ${MONO}`, c: C.mut, al: a2 });
+  lab('gőzfejlesztő', '', 456, 676, C.ink, a3, 'center');
+  lab('szekunder kör: gőz', '≈ 46 bar · 260 °C', 470, 170, '#dfe9ff', a4); lab('turbina', '3000 ford./perc', 778, 376, C.ink, a4, 'right');
+  lab('generátor', '', 944, 386, C.e, a6); lab('≈ 2 000 MW', 'a hazai áramtermelés közel fele', 1320, 452, C.e, a6, 'right');
+  lab('kondenzátor', 'a fáradt gőz újra víz lesz', 1026, 566, '#8fc0ff', a5);
+  // energialánc
+  const chain = ['maghasadás', 'hő', 'gőz', 'forgás', 'áram'], cols = [C.cy, '#ff8f7a', '#dfe9ff', '#b8c6e0', C.e]; let x = 60; const y = 930, aE = smooth(pr(st, 5.4, 6.2));
+  if (aE > 0) { ctx.save(); ctx.globalAlpha = aE; ctx.font = `600 28px ${BODY}`; const act = Math.floor((t * 1.2) % 5);
+    chain.forEach((c, i) => { const w = ctx.measureText(c).width + 34; rr(ctx, x, y - 34, w, 50, 25); ctx.fillStyle = i === act ? rgba('#ffffff', .12) : 'rgba(255,255,255,.03)'; ctx.fill(); ctx.strokeStyle = cols[i]; ctx.lineWidth = i === act ? 2.5 : 1.2; ctx.stroke(); T(ctx, c, x + 17, y, { f: `600 28px ${BODY}`, c: cols[i] }); x += w; if (i < 4) { T(ctx, '→', x + 6, y, { f: `400 26px ${BODY}`, c: C.mut }); x += 36; } });
+    T(ctx, 'egy uránpasztilla (≈ 5 g) annyi energiát ad, mint több száz kg szén', 60, 1000, { f: `400 22px ${BODY}`, c: C.mut });
+    ctx.restore(); }
+}
+
+/* ════════════════ háttér ════════════════ */
+const DUST = []; for (let i = 0; i < 90; i++) DUST.push({ x: R(1920), y: R(1080), r: R(.6, 2.2), s: R(4, 16), p: R(TAU) });
+function drawBg(ctx, L) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, 1920, 1080); const t = L.t;
+  ctx.globalCompositeOperation = 'lighter';
+  glow(ctx, 660 + Math.sin(t * .13) * 60, 560, 1000, '#12397a', .34); glow(ctx, 1500, 200, 700, '#0c2a66', .22); glow(ctx, 150, 1000, 520, '#0a3a5a', .16);
+  for (const d of DUST) { const y = (d.y - t * d.s) % 1080, yy = y < 0 ? y + 1080 : y; ctx.fillStyle = `rgba(150,205,255,${.10 + .10 * Math.sin(t * .8 + d.p)})`; ctx.beginPath(); ctx.arc(d.x + Math.sin(t * .3 + d.p) * 12, yy, d.r, 0, TAU); ctx.fill(); }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = 'rgba(140,190,255,.22)'; ctx.lineWidth = 1.2;
+  for (const [x, y, sx, sy] of [[28, 28, 1, 1], [1352, 28, -1, 1], [28, 1052, 1, -1], [1352, 1052, -1, -1]]) { ctx.beginPath(); ctx.moveTo(x + sx * 22, y); ctx.lineTo(x, y); ctx.lineTo(x, y + sy * 22); ctx.stroke(); }
+}
+
+/* ════════════════ egyenlet (DOM) ════════════════ */
+let EQ;
+function makeEq(L) {
+  EQ = document.createElement('div'); EQ.id = 'eq';
+  EQ.innerHTML = `<span class="part"><sup>235</sup><span class="p">U</span><span class="op">+</span><span class="n">n</span></span><span class="part"><span class="op">→</span><sup>141</sup>Ba<span class="op">+</span><sup>92</sup>Kr</span><span class="part"><span class="op">+</span><span class="n">3 n</span></span><span class="part"><span class="op">+</span><span class="e">≈ 200 MeV</span></span>
+  <div class="bk part">nukleonok: <i>235 + 1 = 141 + 92 + 3</i> <b>✓</b> &nbsp;·&nbsp; protonok: <i>92 = 56 + 36</i> <b>✓</b></div>`;
+  L.layer.append(EQ);
+}
+function updEq(L) {
+  const a = clamp(1 - Math.abs(L.sp - 3) * 2.2), st = L.step === 3 ? L.st : (L.step > 3 ? 99 : 0);
+  EQ.style.opacity = a; const ps = EQ.querySelectorAll('.part'), tm = [.6, TS + 1.6, TS + 2.4, TS + 3.2, TS + 4.3];
+  ps.forEach((p, i) => p.classList.toggle('on', st >= tm[i]));
+}
+
+/* ════════════════ lecke ════════════════ */
+const SCENE = [0, 0, 0, 0, 1, 2, 2, 2, 3];
+let rodSlider = null, autoBtn = null;
+Lesson.create({
+  subject: 'Kémia', title: 'A maghasadás működése',
+  steps: [
+    { title: 'Az atommag: sűrű nukleon­csomag',
+      text: `<p>Az atom közepén parányi, de elképesztően sűrű mag ül: <span class="key">protonok</span> (pozitív töltésűek) és <span class="key2">neutronok</span> (semlegesek) szoros halmaza.</p><p>Az <b>urán-235</b> magjában <span class="fx">92 p + 143 n</span> zsúfolódik össze.</p><p class="note">A protonszám dönti el, melyik elemről van szó; a neutronszám azt, hogy melyik izotópjáról.</p>`,
+      enter() { if (NS.mode !== 'u235') { restore(SNAP235, 'u235'); } } },
+    { title: 'Miért billeg a nagy atommag?',
+      text: `<p>A magot az <span class="key2">erős kölcsönhatás</span> tartja össze – de csak a közvetlen szomszédok között hat, mint a ragasztó.</p><p>A protonok <span class="key">elektromos taszítása</span> viszont az egész magon átér. 92 protonnál a két hatás már majdnem kiegyenlíti egymást: a mag úgy remeg, mint egy <em>túl nagyra nőtt vízcsepp</em>.</p>`,
+      enter() { if (NS.mode !== 'u235') restore(SNAP235, 'u235'); } },
+    { title: 'Egy lassú neutron betalál',
+      text: `<p>A neutronnak nincs töltése, ezért a mag nem taszítja: egy <span class="key2">lassú neutron</span> akadálytalanul becsúszik.</p><p>A befogáskor energia szabadul fel, így <span class="key">gerjesztett urán-236</span> keletkezik: <span class="fx">²³⁵U + n → ²³⁶U*</span></p><p>A „csepp” vadul rezegni kezd…</p>`,
+      enter() { restore(SNAP235, 'u235'); NS.nAlpha = 0; NS.x[235] = -27; NS.y[235] = .4; NS.z[235] = 0; } },
+    { title: 'A hasadás – lassítva',
+      text: `<p>A rezgő mag <b>megnyúlik</b>, középen <b>befűződik</b>. A két fél között az erős kölcsönhatás már nem ér át – a <span class="key">taszítás</span> győz, és a mag <b>kettészakad</b>.</p><p>Két közepes mag (itt bárium és kripton), <span class="key2">2–3 gyors neutron</span> és gamma-sugárzás keletkezik.</p><p class="note">A valóságban mindez a másodperc billiomod részénél is rövidebb.</p>`,
+      enter() { if (NS.mode !== 'u236') restore(SNAP236, 'u236'); NS.nAlpha = 1; NS.qAmp = 5; assignLobes(); } },
+    { title: 'Honnan jön az energia?',
+      text: `<p>A közepes magokban a nukleonok <b>szorosabban kötöttek</b>, mint az uránban. A különbség nukleononként ≈ 0,9 MeV – ez szabadul fel.</p><p>A termékek össztömege kb. 0,1%-kal kisebb: a „hiányzó” tömeg energiává vált.</p><span class="big-fx">E = mc²</span><p class="note">Egy szénatom elégése ≈ 4 eV – egy hasadás ötvenmilliószor ennyi.</p>` },
+    { title: 'Láncreakció: 1 → 3 → 9 → …',
+      text: `<p>Minden hasadás 2–3 új neutront szabadít fel. Ha ezek újabb urán-235 magokat találnak el, a folyamat <span class="key">önmagát gyorsítja</span>: a hasadások száma generációról generációra sokszorozódik.</p><p>Indíts el <b>egyetlen</b> neutront, és figyeld a generációkat!</p>`,
+      enter() { csSetup('chain'); CS.dispG = []; CS.autoAt = 3.2; },
+      controls(L) { L.button('Neutron indítása', () => launchChain()); L.button('Újra', () => L.replay()); } },
+    { title: 'Kritikus tömeg: a <em>k</em> tényező',
+      text: `<p>Kis tömbből a neutronok többsége <b>kiszökik</b>, mielőtt magot találna. A <span class="key">k</span> megmutatja, hány újabb hasadást okoz átlagosan egy hasadás.</p><ul><li><span class="fx">k &lt; 1</span> a reakció elhal</li><li><span class="fx">k = 1</span> állandó ütem (reaktor)</li><li><span class="fx">k &gt; 1</span> megszalad</li></ul>`,
+      enter() { CS.Rf = RCRIT * .62; csSetup('crit'); },
+      controls(L) { L.slider({ label: 'Az urángömb mérete', min: .45, max: 1.7, step: .01, value: .62, format: (v) => '≈ ' + (52 * v ** 3 < 20 ? hu(52 * v ** 3, 1) : Math.round(52 * v ** 3)) + ' kg', onInput: (v) => setRf(RCRIT * v) }); } },
+    { title: 'A megszelídített láncreakció',
+      text: `<p>A <span class="key2">moderátor</span> (víz) lelassítja a gyors neutronokat – a lassú neutron sokkal nagyobb eséllyel hasít.</p><p>A bórtartalmú <span class="key">szabályozórudak</span> elnyelik a fölösleget. A cél: pontosan <span class="fx">k = 1</span>.</p>`,
+      enter() { csSetup('reactor'); },
+      controls(L) {
+        rodSlider = L.slider({ label: 'Szabályozórudak benyúlása', min: 5, max: 100, step: 1, value: 56, format: (v) => Math.round(v) + ' %', onInput: (v) => { CS.auto = false; CS.rodT = v / 100; autoBtn.classList.remove('on'); } });
+        autoBtn = L.button('Automata', (b) => { CS.auto = !CS.auto; b.classList.toggle('on', CS.auto); }); autoBtn.classList.add('on');
+        L.button('Vészleállítás', () => { CS.auto = false; CS.rodT = 1; CS.warn = 3; autoBtn.classList.remove('on'); });
+        CS.onScram = () => autoBtn && autoBtn.classList.remove('on');
+      },
+      leave() { rodSlider = null; } },
+    { title: 'Atomerőmű: hasadásból áram',
+      text: `<p>Pakson négy <b>nyomottvizes reaktor</b> működik. A hasadás hője a zárt <span class="key">primer kör</span> vizét melegíti; ez a gőzfejlesztőben a <span class="key2">szekunder kör</span> vizéből gőzt fejleszt, a gőz turbinát, az pedig generátort hajt.</p><p class="note">Az urán energiasűrűsége milliószoros, szén-dioxid nem keletkezik – a kiégett fűtőelemek biztonságos tárolása viszont komoly felelősség.</p>` },
+  ],
+  init(L) {
+    SP_P = sphereSprites('#ffd2c2', '#ff7a55', '#8a2412'); SP_N = sphereSprites('#f2f6ff', '#9db1cf', '#2c3955');
+    MINI = makeMini(false); MINI_DEAD = makeMini(true); nsInit(); makeEq(L);
+  },
+  draw(L) {
+    const ctx = L.ctx; drawBg(ctx, L);
+    const f = clamp(L.sp, 0, 8), i = Math.round(f), sc = SCENE[i], j = f > i ? i + 1 : i - 1; let fade = 0;
+    if (j >= 0 && j <= 8 && SCENE[j] !== sc) fade = Math.min(1, Math.abs(f - i) * 2);
+    ctx.save();
+    if (sc === 0) drawA(ctx, L); else if (sc === 1) drawB(ctx, L); else if (sc === 2) drawC(ctx, L); else drawD(ctx, L);
+    ctx.restore();
+    if (fade > 0) { ctx.save(); ctx.globalAlpha = smooth(fade); drawBg(ctx, L); ctx.restore(); }
+    updEq(L);
+    if (rodSlider && L.step === 7 && document.activeElement !== rodSlider.input) rodSlider.set(CS.rod * 100);
+  },
+});
+})();
+</script>
+</body>
+</html>

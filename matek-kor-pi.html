@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A kör területe és a π — Matematika</title>
+<link rel="stylesheet" href="shared/lesson.css">
+<style>
+  :root {
+    --bg: #f4ecdc;
+    --ink: #1c2440;
+    --muted: #6c7289;
+    --accent: #e2452a;
+    --accent-ink: #fff8ee;
+    --accent2: #0e8f8a;
+    --panel-bg: rgba(255, 252, 245, .84);
+    --panel-border: rgba(28, 36, 64, .16);
+    --panel-shadow: 0 30px 70px rgba(70, 50, 20, .18), 0 2px 0 rgba(255, 255, 255, .7) inset;
+    --rule: rgba(28, 36, 64, .13);
+  }
+  .lp-text em { color: var(--ink); }
+  .lp-text .fx { font-family: var(--font-display); font-style: italic; font-size: 1.02em; background: rgba(28, 36, 64, .07); }
+  .lp-text .big-fx { font-size: 46px; margin: 8px 0 10px; }
+</style>
+</head>
+<body>
+<script src="shared/lesson.js"></script>
+<script>
+(function () {
+  'use strict';
+  const U = Lesson.U, { clamp, lerp, smooth, inOut, out, outBack } = U;
+  const PI = Math.PI, TAU = PI * 2;
+  const INK = '#1c2440', VER = '#e2452a', TEAL = '#0e8f8a', MUT = '#6c7289', PAPER = '#f6efe2', CARD = '#fffaf0', LIGHT = '#a9adbc';
+  const SERIF = 'Fraunces, Georgia, "Times New Roman", serif';
+  const SANS = '"Bricolage Grotesque", "Segoe UI", sans-serif';
+  const MONO = '"JetBrains Mono", Consolas, monospace';
+  const PI_DIGITS = '3,14159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798214808651328230664709384460955058223172535940812848111745028410270193852110555964462294895493038196442881097566593344612847564823378678316527120190914564856692346034861045432664821339360726024914127372458700660631558817488152092096282925409171536436789259036001133053054882046652138414695194151160943305727036575959195309218611738193261179310511854807446237996274956735188575272489122793818301194912';
+
+  let c, GA = 1, LL;
+  const al = (x = 1) => { c.globalAlpha = GA * clamp(x); };
+  const fmt = (v, d = 2) => v.toFixed(d).replace('.', ',');
+  const fmtInt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  const prog = (t, a, b) => clamp((t - a) / (b - a));
+
+  /* ── állapot ── */
+  const T = new Array(8).fill(0);          // lépésenkénti idő (csak az aktív lépésé halad)
+  const S = {
+    r2: 3, aIdx: 0, aAuto: true, zoom: 3, rot: 0,
+    u: 0, v: 0, pIdx: 4, pAuto: true, pT: 0, ann: 0, cap3: 0,
+    rings: 16, r8: 5,
+  };
+  const AL = [6, 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 192, 384, 768];
+  const NL = [4, 6, 8, 10, 12, 16, 20, 24, 32, 40, 50, 64, 80, 100, 140, 200];
+  const H = {};                             // csúszka-fogantyúk
+
+  /* ── rajz-segédek ── */
+  function rr(x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+  function line(x1, y1, x2, y2, col, w = 2, dash) { c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.strokeStyle = col; c.lineWidth = w; c.setLineDash(dash || []); c.stroke(); c.setLineDash([]); }
+  function dot(x, y, r, col, ring) { c.beginPath(); c.arc(x, y, r, 0, TAU); c.fillStyle = col; c.fill(); if (ring) { c.strokeStyle = ring; c.lineWidth = 3; c.stroke(); } }
+  function shadow(on, blur = 22, oy = 10, a = .2) { if (on) { c.shadowColor = `rgba(70,45,10,${a})`; c.shadowBlur = blur * LL.k; c.shadowOffsetY = oy * LL.k; } else { c.shadowColor = 'transparent'; c.shadowBlur = 0; c.shadowOffsetY = 0; } }
+  function arrow(x, y, ang, s, col) { c.save(); c.translate(x, y); c.rotate(ang); c.beginPath(); c.moveTo(0, 0); c.lineTo(-s, -s * .42); c.lineTo(-s, s * .42); c.closePath(); c.fillStyle = col; c.fill(); c.restore(); }
+  function brace(x1, x2, y, h, col, w = 2.5) {
+    const xm = (x1 + x2) / 2, q = Math.min(h / 2, (x2 - x1) / 4);
+    c.beginPath(); c.moveTo(x1, y); c.quadraticCurveTo(x1, y + h / 2, x1 + q, y + h / 2); c.lineTo(xm - q, y + h / 2); c.quadraticCurveTo(xm, y + h / 2, xm, y + h);
+    c.quadraticCurveTo(xm, y + h / 2, xm + q, y + h / 2); c.lineTo(x2 - q, y + h / 2); c.quadraticCurveTo(x2, y + h / 2, x2, y);
+    c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round'; c.stroke(); c.lineCap = 'butt';
+  }
+  function dim(x1, y1, x2, y2, col, w = 2.5) { // méretvonal végjelekkel
+    line(x1, y1, x2, y2, col, w); const a = Math.atan2(y2 - y1, x2 - x1), nx = -Math.sin(a) * 9, ny = Math.cos(a) * 9;
+    line(x1 - nx, y1 - ny, x1 + nx, y1 + ny, col, w); line(x2 - nx, y2 - ny, x2 + nx, y2 + ny, col, w);
+  }
+
+  /* ── képlet-szedés a vásznon ──
+     _x_ dőlt (változó) · ^2^ felső index · `3,14` mono · ~szöveg~ groteszk · {v|…} szín */
+  const COL = { v: VER, t: TEAL, m: MUT, i: INK, w: CARD, l: LIGHT };
+  function parse(s) {
+    const segs = []; let it = false, sup = false, mono = false, sans = false, col = null, buf = '';
+    const flush = () => { if (buf) { segs.push({ t: buf, it, sup, mono, sans, col }); buf = ''; } };
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === '_') { flush(); it = !it; } else if (ch === '^') { flush(); sup = !sup; } else if (ch === '`') { flush(); mono = !mono; } else if (ch === '~') { flush(); sans = !sans; }
+      else if (ch === '{' && s[i + 2] === '|') { flush(); col = COL[s[i + 1]]; i += 2; } else if (ch === '}') { flush(); col = null; } else buf += ch;
+    }
+    flush(); return segs;
+  }
+  function segFont(g, size, wt) {
+    const sz = g.sup ? size * .6 : size;
+    if (g.mono) return `600 ${sz * .84}px ${MONO}`;
+    if (g.sans) return `${wt || 450} ${sz * .8}px ${SANS}`;
+    return `${g.it ? 'italic ' : ''}${wt || 500} ${sz}px ${SERIF}`;
+  }
+  function rich(s, x, y, size, o = {}) {
+    const segs = parse(s); let w = 0;
+    for (const g of segs) { c.font = segFont(g, size, o.weight); g.w = c.measureText(g.t).width; w += g.w; }
+    if (o.measure) return w;
+    let px = o.align === 'center' ? x - w / 2 : o.align === 'right' ? x - w : x;
+    if (o.pill) { c.fillStyle = o.pill; rr(px - 12, y - size * .88, w + 24, size * 1.24, 10); c.fill(); }
+    c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+    for (const g of segs) { c.font = segFont(g, size, o.weight); c.fillStyle = g.col || o.color || INK; c.fillText(g.t, px, y - (g.sup ? size * .36 : 0)); px += g.w; }
+    return w;
+  }
+  function caption(n, text) {
+    al(1); c.font = `600 22px ${MONO}`; c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.fillStyle = VER;
+    const lab = `${n}. ÁBRA`; c.fillText(lab, 64, 86); const w = c.measureText(lab).width;
+    line(64 + w + 16, 78, 64 + w + 56, 78, VER, 2);
+    rich(`_${text}_`, 64 + w + 72, 87, 30, { color: MUT, weight: 400 });
+  }
+
+  /* ── papír-háttér (egyszer kirajzolva) ── */
+  let bgC = null, bgK = 0;
+  function bg(L) {
+    if (!bgC || bgK !== L.k) {
+      bgK = L.k; bgC = document.createElement('canvas'); bgC.width = L.canvas.width; bgC.height = L.canvas.height;
+      const b = bgC.getContext('2d'); b.scale(L.k, L.k);
+      b.fillStyle = PAPER; b.fillRect(0, 0, 1920, 1080);
+      let g = b.createRadialGradient(560, 380, 80, 680, 540, 1300); g.addColorStop(0, 'rgba(255,253,246,.9)'); g.addColorStop(.55, 'rgba(255,250,238,.25)'); g.addColorStop(1, 'rgba(214,190,150,.42)');
+      b.fillStyle = g; b.fillRect(0, 0, 1920, 1080);
+      for (let x = 0; x <= 1920; x += 40) { b.strokeStyle = `rgba(60,95,150,${x % 200 === 0 ? .15 : .065})`; b.lineWidth = 1; b.beginPath(); b.moveTo(x + .5, 0); b.lineTo(x + .5, 1080); b.stroke(); }
+      for (let y = 0; y <= 1080; y += 40) { b.strokeStyle = `rgba(60,95,150,${y % 200 === 40 ? .15 : .065})`; b.lineWidth = 1; b.beginPath(); b.moveTo(0, y + .5); b.lineTo(1920, y + .5); b.stroke(); }
+      const r = U.rng(7); for (let i = 0; i < 16000; i++) { b.fillStyle = `rgba(80,55,20,${.02 + r() * .035})`; b.fillRect(r() * 1920, r() * 1080, 1.4, 1.4); }
+      // margóvonal, mint egy füzetben
+      b.strokeStyle = 'rgba(226,69,42,.22)'; b.lineWidth = 1.5; b.beginPath(); b.moveTo(40.5, 0); b.lineTo(40.5, 1080); b.stroke();
+    }
+    c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.drawImage(bgC, 0, 0); c.restore();
+  }
+
+  /* ═══════════ 1. A guruló kerék ═══════════ */
+  function sWheel(t) {
+    caption(1, 'A kerék pontosan egyet fordul');
+    const x0 = 175, D = 290, R = D / 2, gy = 720;
+    const p = smooth(prog(t, 1.8, 8.3)), phi = TAU * p, cx = x0 + phi * R, cy = gy - R;
+    const intro = out(prog(t, 0, .9));
+    // számegyenes
+    al(intro);
+    line(x0 - 60, gy, 1296, gy, INK, 2.5); arrow(1306, gy, 0, 16, INK);
+    for (let i = 0; i <= 37; i++) { const x = x0 + i * D / 10, mj = i % 10 === 0; line(x, gy, x, gy + (mj ? 20 : (i % 5 === 0 ? 13 : 8)), INK, mj ? 2.5 : 1.5); }
+    c.font = `600 27px ${MONO}`; c.fillStyle = INK; c.textAlign = 'center';
+    for (let i = 0; i <= 3; i++) c.fillText(String(i), x0 + i * D, gy + 54);
+    rich('× _d_', 1300, gy + 54, 30, { align: 'right', color: MUT });
+    // a festéknyom
+    if (phi > 0) { c.lineCap = 'round'; line(x0, gy, cx, gy, VER, 9); c.lineCap = 'butt'; }
+    // kerék
+    const pop = outBack(prog(t, .2, 1.1));
+    c.save(); c.translate(cx, gy); c.scale(pop, pop); c.translate(-cx, -gy); al(intro);
+    shadow(true, 26, 12, .22); c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.fillStyle = CARD; c.fill(); shadow(false);
+    c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.strokeStyle = INK; c.lineWidth = 2.5; c.stroke();
+    al(intro * .28);
+    for (let k = 0; k < 6; k++) { const a = PI / 2 + phi + k * PI / 6; line(cx - Math.cos(a) * (R - 12), cy - Math.sin(a) * (R - 12), cx + Math.cos(a) * (R - 12), cy + Math.sin(a) * (R - 12), INK, 1.5); }
+    c.beginPath(); c.arc(cx, cy, R * .62, 0, TAU); c.strokeStyle = INK; c.lineWidth = 1.5; c.stroke();
+    al(intro);
+    if (p < 1) { c.beginPath(); c.arc(cx, cy, R - 5.5, PI / 2 + phi, PI / 2 + TAU); c.strokeStyle = VER; c.lineWidth = 9; c.stroke(); }
+    dot(cx, cy, 7, INK);
+    // átmérő-jelölés (indulás előtt és megérkezés után)
+    const dA = Math.max(1 - prog(t, 1.3, 1.9), prog(t, 8.5, 9.1));
+    if (dA > 0) {
+      al(intro * dA); dim(cx - R + 8, cy, cx + R - 8, cy, TEAL, 3);
+      rich('{t|_d_ = 1}', cx, cy - 22, 40, { align: 'center', pill: CARD });
+    }
+    // jelölő pont a peremen
+    al(intro); const ma = PI / 2 + phi; dot(cx + Math.cos(ma) * R, cy + Math.sin(ma) * R, 10, VER, CARD);
+    c.restore();
+    // felirat fent
+    const a1 = prog(t, 1.4, 1.9) * (1 - prog(t, 8.5, 8.9)), a2 = prog(t, 9.0, 9.7);
+    if (a1 > 0) { al(a1); rich(`~megtett út:~  \`${fmt(phi * R / D, 2)}\` × _d_`, 680, 230, 50, { align: 'center' }); }
+    if (a2 > 0) { al(a2); rich('_K_ = {v|`3,14159…`} × _d_', 680, 222 + (1 - out(a2)) * 16, 68, { align: 'center' }); }
+    const a3 = prog(t, 11.4, 12.2);
+    if (a3 > 0) { al(a3); rich('~ezt a számot hívjuk így:~  {v|_π_}   ~(pí)~', 680, 296 + (1 - out(a3)) * 12, 40, { align: 'center', color: MUT }); }
+    // átmérő-rudak a nyom alatt
+    const by = gy + 82, bh = 44;
+    for (let i = 0; i < 3; i++) {
+      const a = prog(t, 9.6 + i * .35, 10.1 + i * .35); if (a <= 0) continue;
+      const e = outBack(a); al(a); const x = x0 + i * D + 3, y = by - (1 - e) * 40;
+      shadow(true, 10, 4, .16); c.fillStyle = '#cfe7e3'; rr(x, y, D - 6, bh, 8); c.fill(); shadow(false);
+      c.strokeStyle = TEAL; c.lineWidth = 2; rr(x, y, D - 6, bh, 8); c.stroke();
+      rich('{t|_d_}', x + (D - 6) / 2, y + 32, 32, { align: 'center' });
+    }
+    const aR = prog(t, 10.7, 11.2);
+    if (aR > 0) {
+      al(aR); const x = x0 + 3 * D + 3, w = (PI - 3) * D - 3;
+      c.fillStyle = '#f6b9a8'; rr(x, by, w, bh, 6); c.fill(); c.strokeStyle = VER; c.lineWidth = 2; rr(x, by, w, bh, 6); c.stroke();
+      line(x + w / 2, by + bh + 4, x + w / 2, by + bh + 34, VER, 2);
+      rich('{v|`0,14159…` × _d_}', x + w / 2 + 40, by + bh + 70, 32, { align: 'right' });
+      // π a számegyenesen
+      const px = x0 + PI * D, pulse = 1 + Math.sin(t * 3) * .05;
+      line(px, gy + 2, px, gy + 26, VER, 3);
+      c.save(); c.translate(px + 26, gy + 58); c.scale(pulse, pulse); rich('{v|_π_}', 0, 0, 50, { align: 'center' }); c.restore();
+    }
+  }
+
+  /* ═══════════ 2. K / d mindig π ═══════════ */
+  function sRatio(t) {
+    caption(2, 'Kerület ÷ átmérő');
+    const PX = 34, r = S.r2, rp = r * PX, gy = 730, cx = 200, cy = gy - rp, K = TAU * rp;
+    const intro = out(prog(t, 0, .8)), f = smooth(prog(t, .7, 3.4));
+    al(intro); line(50, gy, 1320, gy, INK, 2);
+    // kör
+    shadow(true, 24, 10, .2); c.beginPath(); c.arc(cx, cy, rp, 0, TAU); c.fillStyle = CARD; c.fill(); shadow(false);
+    c.beginPath(); c.arc(cx, cy, rp, 0, TAU); c.strokeStyle = INK; c.lineWidth = 2.5; c.stroke();
+    line(cx - rp, cy, cx + rp, cy, TEAL, 3, [9, 7]); dot(cx, cy, 5, INK);
+    rich(`{t|_d_ = \`${fmt(2 * r, 1)}\` ~cm~}`, cx, cy - rp - 24, 34, { align: 'center' });
+    // lemért ív és kiterített hossz
+    if (f > 0) {
+      c.beginPath(); c.arc(cx, cy, rp, PI / 2, PI / 2 + f * TAU); c.strokeStyle = VER; c.lineWidth = 7; c.lineCap = 'round'; c.stroke();
+      line(cx, gy, cx + f * K, gy, VER, 7); c.lineCap = 'butt';
+    }
+    line(cx, gy - 12, cx, gy + 12, INK, 2.5);
+    if (f >= 1) line(cx + K, gy - 12, cx + K, gy + 12, INK, 2.5);
+    const q = t < 3.6 ? f : ((t - 3.6) * .11) % 1;
+    dot(cx + Math.cos(PI / 2 + q * TAU) * rp, cy + Math.sin(PI / 2 + q * TAU) * rp, 9, VER, CARD);
+    dot(cx + q * K, gy, 9, VER, CARD);
+    if (f > .02) { al(intro * prog(f, .05, .3)); rich(`{v|_K_ = \`${fmt(f * TAU * r, 2)}\` ~cm~}`, Math.max(cx + rp + 30, cx + K - 250), gy - 26, 34); }
+    // átmérő-rudak
+    const by = gy + 30, bh = 42, d = 2 * rp;
+    for (let i = 0; i < 3; i++) {
+      const a = clamp((f * PI - (i + 1)) * 5 + 1); if (a <= 0) continue;
+      al(intro * a); const x = cx + i * d + 2;
+      c.fillStyle = '#cfe7e3'; rr(x, by, d - 4, bh, 7); c.fill(); c.strokeStyle = TEAL; c.lineWidth = 2; rr(x, by, d - 4, bh, 7); c.stroke();
+      rich('{t|_d_}', x + (d - 4) / 2, by + 31, 30, { align: 'center' });
+    }
+    if (f >= 1) {
+      const a = prog(t, 3.4, 3.8); al(intro * a); const x = cx + 3 * d + 2, w = (PI - 3) * d - 2;
+      c.fillStyle = '#f6b9a8'; rr(x, by, w, bh, Math.min(6, w / 3)); c.fill(); c.strokeStyle = VER; c.lineWidth = 2; rr(x, by, w, bh, Math.min(6, w / 3)); c.stroke();
+      rich('~3 átmérő és még egy kicsi — mindig~', cx, by + bh + 46, 32, { color: MUT });
+    }
+    // számok
+    const X = 870;
+    const row = (y, lab, val, a) => { al(intro * a); rich(lab, X - 16, y, 44, { align: 'right' }); rich(val, X, y, 44); };
+    row(190, '_r_', `= \`${fmt(r, 1)}\` ~cm~`, prog(t, .3, .8));
+    row(254, '{t|_d_} = 2_r_', `= {t|\`${fmt(2 * r, 1)}\` ~cm~}`, prog(t, .5, 1));
+    row(318, '{v|_K_}', `= {v|\`${fmt(f * TAU * r, 2)}\` ~cm~}`, prog(t, .7, 1.2));
+    al(intro * prog(t, .9, 1.4)); line(640, 356, 1290, 356, INK, 1.5);
+    const aB = prog(t, 3.5, 4.2);
+    if (aB > 0) {
+      al(aB); const s = 1 + (1 - outBack(aB)) * .12;
+      c.save(); c.translate(965, 458); c.scale(s, s); rich('{v|_K_} / {t|_d_} = {v|`3,14159…`}', 0, 0, 72, { align: 'center' }); c.restore();
+    }
+    const aC = prog(t, 4.6, 5.3);
+    if (aC > 0) { al(aC); rich('~bármekkora a kör, a hányados mindig~ {v|_π_}', 965, 528, 38, { align: 'center', color: MUT }); }
+    const aD = prog(t, 5.6, 6.4);
+    if (aD > 0) { al(aD); rich('{v|_K_} = _π_ · {t|_d_} = 2_π_ _r_', 965, 624 - (1 - out(aD)) * -14, 56, { align: 'center' }); }
+  }
+
+  /* ═══════════ 3. Arkhimédész ═══════════ */
+  function archFig(n, cx, cy, R, s, rot) {
+    const th = TAU / n, Rc = R / Math.cos(PI / n), g = c.globalAlpha;
+    c.lineJoin = 'round';
+    c.beginPath(); for (let k = 0; k < n; k++) { const a = rot - PI / 2 + (k + .5) * th; c.lineTo(cx + Math.cos(a) * Rc, cy + Math.sin(a) * Rc); } c.closePath();
+    c.fillStyle = '#fbd9cd'; c.fill(); c.strokeStyle = VER; c.lineWidth = 3 * s; c.stroke();
+    c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.fillStyle = CARD; c.fill();
+    c.beginPath(); for (let k = 0; k < n; k++) { const a = rot - PI / 2 + k * th; c.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); } c.closePath();
+    c.fillStyle = '#d3ebe7'; c.fill(); c.strokeStyle = TEAL; c.lineWidth = 3 * s; c.stroke();
+    c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.strokeStyle = INK; c.lineWidth = 3 * s; c.stroke();
+    c.globalAlpha = g; c.lineJoin = 'miter';
+  }
+  function sArch(t, live) {
+    caption(3, 'Sokszögek közé szorított kör');
+    const cx = 390, cy = 565, R = 285;
+    if (live && S.aAuto) {
+      const st = clamp(Math.floor((t - 3.2) / 1.9), 0, 4), idx = [0, 3, 6, 8, 10][st];
+      if (idx !== S.aIdx) { S.aIdx = idx; H.arch && H.arch.set(idx); }
+    }
+    const n = AL[S.aIdx], lo = n * Math.sin(PI / n), hi = n * Math.tan(PI / n);
+    const gap = R * (1 / Math.cos(PI / n) - Math.cos(PI / n)), zT = clamp(46 / gap, 3, 600);
+    S.zoom = Math.exp(lerp(Math.log(S.zoom), Math.log(zT), 1 - Math.exp(-LL.dt * 5)));
+    if (live) S.rot += LL.dt * .16 / S.zoom;
+    const intro = out(prog(t, 0, .9));
+    // fő ábra
+    al(intro); c.save(); shadow(true, 26, 12, .18);
+    c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.fillStyle = CARD; c.fill(); shadow(false); c.restore();
+    const aP = prog(t, .8, 1.8);
+    if (aP < 1) { c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.strokeStyle = INK; c.lineWidth = 3; c.stroke(); }
+    if (aP > 0) { al(intro * aP); archFig(n, cx, cy, R, 1, S.rot); }
+    al(intro); dot(cx, cy, 5, INK);
+    // jelmagyarázat az ábra alatt
+    al(intro * prog(t, 1.4, 2));
+    line(150, 965, 190, 965, TEAL, 4); rich('{t|~beírt sokszög~}', 202, 975, 34);
+    line(430, 965, 470, 965, VER, 4); rich('{v|~körülírt sokszög~}', 482, 975, 34);
+    // jobb oldali számok
+    const X0 = 780, X1 = 1318;
+    al(intro * prog(t, .6, 1.2)); rich(`_n_ = \`${n}\``, X0, 216, 92); rich('~oldalú szabályos sokszög~', X0, 262, 32, { color: MUT });
+    al(intro * prog(t, 1.6, 2.2));
+    rich('~kerület ÷ átmérő~', X1, 322, 30, { align: 'right', color: MUT });
+    rich('{t|~beírt:~}', X0, 372, 40); rich(`{t|\`${fmt(lo, 5)}\`}`, X1, 372, 44, { align: 'right' });
+    rich('{v|~körülírt:~}', X0, 426, 40); rich(`{v|\`${fmt(hi, 5)}\`}`, X1, 426, 44, { align: 'right' });
+    line(X0, 452, X1, 452, INK, 1.5);
+    // harapófogó: megegyező számjegyek kiemelve
+    const sl = fmt(lo, 5), sh = fmt(hi, 5); let p = 0; while (p < sl.length && sl[p] === sh[p]) p++;
+    al(intro * prog(t, 2.2, 2.9));
+    rich(`\`{i|${sl.slice(0, p)}}{l|${sl.slice(p)}}\`  <  {v|_π_}  <  \`{i|${sh.slice(0, p)}}{l|${sh.slice(p)}}\``, (X0 + X1) / 2, 524, 50, { align: 'center' });
+    // számegyenes
+    const ax = (v) => X0 + 10 + (clamp(v, 2.95, 3.5) - 2.95) / .55 * (X1 - X0 - 20), ay = 690;
+    line(X0, ay, X1, ay, INK, 2);
+    c.font = `500 22px ${MONO}`; c.textAlign = 'center'; c.fillStyle = MUT;
+    for (let v = 30; v <= 35; v++) { const x = ax(v / 10); line(x, ay, x, ay + 10, INK, 2); c.fillText(fmt(v / 10, 1), x, ay + 38); }
+    const xl = ax(lo), xh = ax(hi);
+    const g = c.createLinearGradient(xl, 0, xh, 0); g.addColorStop(0, 'rgba(14,143,138,.4)'); g.addColorStop(1, 'rgba(226,69,42,.4)');
+    c.fillStyle = g; c.fillRect(xl, ay - 30, Math.max(2, xh - xl), 30);
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath(); c.moveTo(xl + 9, ay - 38); c.lineTo(xl, ay - 38); c.lineTo(xl, ay + 2); c.lineTo(xl + 9, ay + 2); c.strokeStyle = TEAL; c.lineWidth = 4; c.stroke();
+    c.beginPath(); c.moveTo(xh - 9, ay - 38); c.lineTo(xh, ay - 38); c.lineTo(xh, ay + 2); c.lineTo(xh - 9, ay + 2); c.strokeStyle = VER; c.lineWidth = 4; c.stroke();
+    c.lineCap = 'butt'; c.lineJoin = 'miter';
+    const xp = ax(PI); line(xp, ay - 46, xp, ay, INK, 2, [4, 4]); rich('_π_', xp, ay - 54, 36, { align: 'center' });
+    if (n === 96) { al(intro); rich('~Arkhimédész, Kr. e. 250 körül:~  `3 10/71 < π < 3 1/7`', (X0 + X1) / 2, 574, 28, { align: 'center', color: MUT }); }
+    // nagyító
+    const aL = prog(t, 2.4, 3.2);
+    if (aL > 0) {
+      al(aL); const lx = 1170, ly = 890, lr = 128, fa = .52, fx = cx + Math.cos(fa) * R, fy = cy + Math.sin(fa) * R, Z = S.zoom;
+      const da = Math.atan2(ly - fy, lx - fx);
+      line(fx + Math.cos(da) * 16, fy + Math.sin(da) * 16, lx - Math.cos(da) * lr, ly - Math.sin(da) * lr, INK, 1.5, [6, 6]);
+      c.beginPath(); c.arc(fx, fy, 15, 0, TAU); c.strokeStyle = INK; c.lineWidth = 2.5; c.stroke();
+      c.save(); shadow(true, 26, 12, .22); c.beginPath(); c.arc(lx, ly, lr, 0, TAU); c.fillStyle = PAPER; c.fill(); shadow(false);
+      c.clip(); c.translate(lx, ly); c.scale(Z, Z); c.translate(-fx, -fy);
+      // nagy nagyításnál a kör középpontját közel hozzuk, hogy a számítás pontos maradjon
+      archFig(n, cx, cy, R, 1.25 / Z, S.rot); c.restore();
+      c.beginPath(); c.arc(lx, ly, lr, 0, TAU); c.strokeStyle = INK; c.lineWidth = 4; c.stroke();
+      c.beginPath(); c.arc(lx, ly, lr - 7, 0, TAU); c.strokeStyle = 'rgba(28,36,64,.18)'; c.lineWidth = 1.5; c.stroke();
+      rich('~nagyító~', lx - lr - 28, ly - 8, 32, { align: 'right', color: MUT });
+      rich(`\`${Z < 10 ? fmt(Z, 1) : Math.round(Z)}×\``, lx - lr - 28, ly + 38, 44, { align: 'right' });
+    }
+  }
+
+  /* ═══════════ 4–5. Pizza-szeletek → téglalap ═══════════ */
+  function pizzaPoses(n, u, v) {
+    const m = n / 2, th = TAU / n, h = Math.cos(th / 2), cc = Math.sin(th / 2), poses = [];
+    for (let half = 0; half < 2; half++) {
+      const am = half ? 1.5 * PI : .5 * PI, A = []; let x = 0, y = 0, pa = 0;
+      for (let j = 0; j < m; j++) {
+        const a = am + (j - (m - 1) / 2) * th * (1 - u);
+        if (j > 0) { x += Math.cos(pa + th / 2) - Math.cos(a - th / 2); y += Math.sin(pa + th / 2) - Math.sin(a - th / 2); }
+        A.push({ x, y, a, half, j }); pa = a;
+      }
+      let qx, qy;
+      if (m % 2 === 0) { const s = A[m / 2 - 1]; qx = s.x + Math.cos(s.a + th / 2); qy = s.y + Math.sin(s.a + th / 2); }
+      else { const s = A[(m - 1) / 2]; qx = s.x + Math.cos(s.a); qy = s.y + Math.sin(s.a); }
+      const sgn = half ? -1 : 1, e = m % 2 === 0 ? 1 - h : 0;
+      const dx = v * (half ? cc / 2 : -cc / 2), dy = v * ((half ? h / 2 : -h / 2) - sgn * e);
+      for (const s of A) { s.x += -qx + dx; s.y += sgn - qy + dy; poses.push(s); }
+    }
+    return { poses, th, h, cc, m };
+  }
+  function sPizza(L) {
+    const step = L.step, cx = 680, cy = 490, r = 250;
+    let n, k = 1, intro = 1, t3 = T[3];
+    if (step === 3) {
+      S.u = inOut(prog(t3, 3.4, 6.8)); S.v = inOut(prog(t3, 7.3, 9.3)); S.pIdx = 4;
+    } else if (step === 4) {
+      if (S.u < 1) S.u = Math.min(1, S.u + L.dt * .9); else if (S.v < 1) S.v = Math.min(1, S.v + L.dt * 1.1);
+      else if (S.pAuto) { S.pT += L.dt; const idx = clamp(4 + Math.floor((S.pT - 1.4) / .5), 4, NL.length - 1); if (idx !== S.pIdx && S.pT > 1.4) { S.pIdx = idx; H.pizza && H.pizza.set(idx); } }
+    }
+    if (L.sp < 3.5) { k = prog(t3, 1.3, 2.7); intro = out(prog(t3, 0, .9)); }
+    n = NL[S.pIdx];
+    S.ann += ((step === 4 && S.v >= 1 ? 1 : 0) - S.ann) * (1 - Math.exp(-L.dt * 4));
+    S.cap3 += ((step === 3 && t3 > 9.6 ? 1 : 0) - S.cap3) * (1 - Math.exp(-L.dt * 4));
+    caption(L.sp < 3.5 ? 4 : 5, L.sp < 3.5 ? 'A kör, cikkekre vágva és kihajtva' : 'A szeletekből téglalap lesz');
+
+    const { poses, th, h, cc, m } = pizzaPoses(n, S.u, S.v);
+    const pop = step === 3 ? outBack(prog(t3, .1, 1)) : 1;
+    c.save(); c.translate(cx, cy); c.scale(pop, pop); c.translate(-cx, -cy);
+    const path = (s) => { const ax = cx + s.x * r, ay = cy + s.y * r; c.moveTo(ax, ay); c.arc(ax, ay, r, s.a - th / 2, s.a + th / 2); c.closePath(); };
+    // közös árnyék
+    al(intro); shadow(true, 24, 12, .22); c.beginPath(); for (const s of poses) path(s); c.fillStyle = CARD; c.fill(); shadow(false);
+    const lw = Math.min(1.8, 44 / n) * k;
+    const cols = [['#f3b9a6', '#f8d2c5'], ['#a9d6d1', '#c9e5e1']];
+    for (const s of poses) {
+      c.beginPath(); path(s); c.fillStyle = U.mix(CARD, cols[s.half][s.j % 2], k); c.fill();
+      if (lw > .02) { c.strokeStyle = INK; c.lineWidth = lw; c.lineJoin = 'round'; c.stroke(); }
+    }
+    // a kerület két fele színesben
+    c.lineCap = 'round';
+    for (const s of poses) { const ax = cx + s.x * r, ay = cy + s.y * r; c.beginPath(); c.arc(ax, ay, r, s.a - th / 2, s.a + th / 2); c.strokeStyle = U.mix(INK, s.half ? TEAL : VER, k); c.lineWidth = lerp(2.5, 5, k); c.stroke(); }
+    c.lineCap = 'butt'; c.lineJoin = 'miter';
+    c.restore();
+    // sugár-jelölés a még egész körön
+    const aR = intro * (1 - prog(t3, 2.9, 3.4)) * prog(t3, .7, 1.2);
+    if (L.sp < 3.5 && aR > 0) { al(aR); line(cx, cy, cx + r, cy, INK, 3); dot(cx, cy, 6, INK); rich('_r_', cx + r / 2, cy - 16, 44, { align: 'center', pill: CARD }); }
+    // 4. lépés: záró felirat
+    if (S.cap3 > .01) {
+      al(S.cap3); rich('~Ugyanaz a terület — csak átrendeztük a szeleteket.~', cx, 830, 42, { align: 'center' });
+      rich('{v|~alul: a kerület egyik fele~}      {t|~felül: a másik fele~}', cx, 888, 34, { align: 'center' });
+    }
+    // 5. lépés: méretek, képlet
+    if (S.ann > .01) {
+      const a = S.ann, xl = cx - (m + .5) * cc * r, xr = cx + (m - .5) * cc * r, yb = cy + r * h / 2 + r * (1 - h), yt = cy - r * h / 2 - r * (1 - h);
+      al(a); rich(`_n_ = \`${n}\` ~szelet~`, cx, 190, 62, { align: 'center' });
+      // magasság
+      const hx = xl - 44; dim(hx, cy - r / 2, hx, cy + r / 2, INK, 2.5); rich('_r_', hx - 20, cy + 14, 48, { align: 'right' });
+      // felső fél kerület
+      rich('{t|~a kerület másik fele: ~_π_ _r_}', cx, yt - 24, 34, { align: 'center' });
+      // alap
+      brace(xl, xr, yb + 18, 30, VER, 3);
+      rich('{v|_π_ _r_}  ~— a kerület fele~', cx, yb + 100, 50, { align: 'center' });
+      rich(`~az alap most:~  \`${fmt(n * Math.sin(PI / n), 4)}\` · _r_   →   {v|\`3,1416…\` · _r_}`, cx, yb + 150, 34, { align: 'center', color: MUT });
+      const aF = a * clamp((S.pIdx - 9) / 3);
+      if (aF > 0) {
+        al(aF); const y = 968;
+        c.save(); c.translate(cx, y); const s = 1 + (1 - outBack(clamp(aF))) * .1; c.scale(s, s);
+        rich('{t|_T_} = {v|_π_ _r_} · _r_ = _π_ _r_^2^', 0, 0, 72, { align: 'center' }); c.restore();
+      }
+    }
+  }
+
+  /* ═══════════ 6. Hagymakarikák → háromszög ═══════════ */
+  function sOnion(t) {
+    caption(6, 'Gyűrűk kiegyenesítve');
+    const cx = 680, cy = 340, R = 190, N = S.rings, w = R / N;
+    const intro = out(prog(t, 0, .9)), pop = outBack(prog(t, .1, 1));
+    // a kör helye halványan
+    const aG = prog(t, 3, 4.5);
+    if (aG > 0) { al(aG * .5); c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.strokeStyle = INK; c.lineWidth = 1.5; c.setLineDash([7, 7]); c.stroke(); c.setLineDash([]); }
+    c.save(); c.translate(cx, cy); c.scale(pop, pop); c.translate(-cx, -cy);
+    al(intro * (1 - prog(t, 2.6, 3.4)) * .9); shadow(true, 24, 12, .22); c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.fillStyle = CARD; c.fill(); shadow(false);
+    const stg = 1.9 / N;
+    for (let i = N - 1; i >= 0; i--) {
+      const rho = (i + .5) * w, s = inOut(clamp((t - 2.7 - (N - 1 - i) * stg) / 2.5)), kk = 1 - s;
+      al(intro); c.strokeStyle = U.mix(TEAL, VER, N > 1 ? i / (N - 1) : 1); c.globalAlpha *= (i % 2 ? .9 : .68);
+      c.lineWidth = Math.max(1, w - Math.min(1.6, w * .12)); c.beginPath();
+      if (kk < .0015) { c.moveTo(cx - PI * rho, cy + rho); c.lineTo(cx + PI * rho, cy + rho); }
+      else { const rp = rho / kk; c.arc(cx, cy + rho - rp, rp, PI / 2 - PI * kk, PI / 2 + PI * kk); }
+      c.stroke();
+    }
+    c.restore();
+    // vágásvonal
+    const aC = prog(t, 1.3, 2.1) * (1 - prog(t, 2.7, 3.1));
+    if (aC > 0) { al(aC); line(cx, cy, cx, cy - R * prog(t, 1.3, 2.1), INK, 3, [8, 6]); rich('~itt vágjuk fel~', cx + 18, cy - R - 14, 30, { color: MUT }); }
+    // sugár a körön
+    const aR0 = prog(t, .7, 1.2) * (1 - prog(t, 2.4, 2.8));
+    if (aR0 > 0) { al(aR0); line(cx, cy, cx + R, cy, INK, 3); rich('_r_', cx + R / 2, cy - 14, 40, { align: 'center', pill: CARD }); }
+    // háromszög, méretek
+    const aT = prog(t, 7.2, 7.9);
+    if (aT > 0) {
+      al(aT); c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx - PI * R, cy + R); c.lineTo(cx + PI * R, cy + R); c.closePath();
+      c.strokeStyle = INK; c.lineWidth = 2.5; c.setLineDash([10, 7]); c.lineJoin = 'round'; c.stroke(); c.setLineDash([]);
+      line(cx, cy + 4, cx, cy + R, CARD, 3.5, [8, 6]); rich('{t|_r_}', cx + 40, cy + R * .62, 42, { align: 'center', pill: CARD });
+      brace(cx - PI * R, cx + PI * R, cy + R + 16, 34, VER, 3);
+      rich('{v|2_π_ _r_}  ~— a legkülső gyűrű hossza: a teljes kerület~', cx, cy + R + 104, 46, { align: 'center' });
+    }
+    const aN = prog(t, 8.2, 8.9);
+    if (aN > 0) { al(aN); rich('~háromszög területe = alap · magasság / 2~', cx, 760, 36, { align: 'center', color: MUT }); }
+    const aF = prog(t, 9, 9.8);
+    if (aF > 0) {
+      al(aF); c.save(); c.translate(cx, 880); const s = 1 + (1 - outBack(aF)) * .1; c.scale(s, s);
+      rich('{t|_T_} = ½ · {v|2_π_ _r_} · {t|_r_} = _π_ _r_^2^', 0, 0, 76, { align: 'center' }); c.restore();
+    }
+  }
+
+  /* ═══════════ 7. Monte-Carlo ═══════════ */
+  const MC = { cv: null, x: null, n: 0, m: 0, hist: [], queue: 0, recent: [], R: 270 };
+  function mcReset() {
+    if (!MC.cv) { MC.cv = document.createElement('canvas'); MC.cv.width = MC.cv.height = MC.R * 4; MC.x = MC.cv.getContext('2d'); }
+    MC.x.setTransform(1, 0, 0, 1, 0, 0); MC.x.clearRect(0, 0, MC.cv.width, MC.cv.height); MC.n = MC.m = 0; MC.hist = []; MC.queue = 0; MC.recent = [];
+  }
+  function mcAdd(k) {
+    const x = MC.x, R = MC.R; x.setTransform(2, 0, 0, 2, 0, 0);
+    for (let i = 0; i < k; i++) {
+      const px = Math.random() * 2 - 1, py = Math.random() * 2 - 1, ins = px * px + py * py <= 1;
+      MC.n++; if (ins) MC.m++;
+      x.globalAlpha = .82; x.fillStyle = ins ? TEAL : VER; x.beginPath(); x.arc(R + px * R, R + py * R, 2.6, 0, TAU); x.fill();
+      if (i >= k - 6) MC.recent.push({ x: px, y: py, ins, age: 0 });
+    }
+    MC.hist.push([MC.n, 4 * MC.m / MC.n]); if (MC.hist.length > 900) MC.hist = MC.hist.filter((_, i) => i % 2 === 0 || i > 800);
+  }
+  function sMonte(t, live) {
+    caption(7, 'A kör és a köré írt négyzet');
+    const cx = 390, cy = 570, R = MC.R, intro = out(prog(t, 0, .9));
+    if (live) {
+      if (t > 4.6 && MC.n < 400 && !MC.queue) mcAdd(2);
+      if (MC.queue > 0) { const k = Math.min(MC.queue, Math.ceil(MC.queue / 18) + 8); mcAdd(k); MC.queue -= k; }
+    }
+    // négyzet
+    al(intro); shadow(true, 26, 12, .2); c.fillStyle = CARD; c.fillRect(cx - R, cy - R, 2 * R, 2 * R); shadow(false);
+    if (MC.cv && MC.n) c.drawImage(MC.cv, cx - R, cy - R, 2 * R, 2 * R);
+    for (const p of MC.recent) { p.age += LL.dt; al(intro * (1 - p.age / .5)); c.beginPath(); c.arc(cx + p.x * R, cy + p.y * R, 4 + p.age * 18, 0, TAU); c.strokeStyle = p.ins ? TEAL : VER; c.lineWidth = 2; c.stroke(); }
+    MC.recent = MC.recent.filter((p) => p.age < .5);
+    al(intro); c.strokeStyle = INK; c.lineWidth = 3; c.strokeRect(cx - R, cy - R, 2 * R, 2 * R);
+    const aC = prog(t, .6, 1.8); c.beginPath(); c.arc(cx, cy, R, -PI / 2, -PI / 2 + TAU * smooth(aC)); c.strokeStyle = INK; c.lineWidth = 3.5; c.stroke();
+    const aQ = prog(t, 1.6, 2.4);
+    if (aQ > 0) {
+      al(aQ); line(cx - R, cy, cx + R, cy, INK, 1.5, [7, 7]); line(cx, cy - R, cx, cy + R, INK, 1.5, [7, 7]);
+      c.fillStyle = 'rgba(226,69,42,.10)'; c.fillRect(cx, cy - R, R, R); c.strokeStyle = VER; c.lineWidth = 3; c.strokeRect(cx + 1.5, cy - R + 1.5, R - 3, R - 3);
+      rich('{v|_r_^2^}', cx + R - 46, cy - R + 56, 46, { align: 'center', pill: CARD });
+      line(cx, cy, cx + R, cy, INK, 3.5); dot(cx, cy, 6, INK); rich('_r_', cx + R / 2, cy + 46, 42, { align: 'center', pill: CARD });
+      dim(cx - R, cy - R - 30, cx + R, cy - R - 30, INK, 2); rich('2_r_', cx, cy - R - 44, 40, { align: 'center', pill: PAPER });
+      rich('~a négyzet területe:~ 4_r_^2^', cx, cy + R + 62, 42, { align: 'center' });
+    }
+    // mérce: hány r²?
+    const X0 = 790, sz = 124, gy = 196, g = inOut(prog(t, 2.2, 4.4));
+    al(intro * prog(t, 1.2, 1.9)); rich('~A kör területe ~_r_^2^~-egységekben~', X0, 168, 40);
+    c.fillStyle = CARD; c.fillRect(X0, gy, 4 * sz, sz);
+    if (g > 0) { c.fillStyle = 'rgba(14,143,138,.32)'; c.fillRect(X0, gy, PI * sz * g, sz); line(X0 + PI * sz * g, gy - 8, X0 + PI * sz * g, gy + sz + 8, VER, 4); }
+    for (let i = 0; i < 4; i++) { c.strokeStyle = INK; c.lineWidth = 2; c.strokeRect(X0 + i * sz, gy, sz, sz); rich('_r_^2^', X0 + i * sz + sz / 2, gy + sz / 2 + 14, 40, { align: 'center', color: i < 3 || g < 1 ? INK : MUT }); }
+    if (g > 0) { rich(`{v|\`${fmt(PI * g, 2)}\`}`, X0 + PI * sz * g, gy + sz + 46, 40, { align: 'center' }); }
+    const aP = prog(t, 4.4, 5);
+    if (aP > 0) { al(aP); rich('~kitöltés:~ _π_ / 4 ≈ `78,5 %`', X0 + 4 * sz, gy + sz + 96, 34, { align: 'right', color: MUT }); }
+    // dobálás-statisztika
+    const aS = prog(t, 4.2, 5); al(aS);
+    const X1 = X0 + 4 * sz, est = MC.n ? 4 * MC.m / MC.n : 0;
+    rich('~pontok:~', X0, 466, 38, { color: MUT }); rich(`\`${fmtInt(MC.n)}\``, X0 + 340, 466, 42, { align: 'right' });
+    rich('{t|~ebből a körben:~}', X0, 516, 38); rich(`{t|\`${fmtInt(MC.m)}\`}`, X0 + 340, 516, 42, { align: 'right' });
+    rich(`~arány × 4:~   _π_ ≈ {v|\`${MC.n ? fmt(est, 4) : '–'}\`}`, X0, 596, 60);
+    // grafikon
+    const gx0 = X0 + 60, gx1 = X1, gy0 = 650, gy1 = 950, lx = (n) => gx0 + clamp(Math.log10(Math.max(1, n)) / 4.7) * (gx1 - gx0), ly = (v) => gy1 - (clamp(v, 2.5, 3.8) - 2.5) / 1.3 * (gy1 - gy0);
+    c.fillStyle = 'rgba(255,250,240,.7)'; c.fillRect(gx0, gy0, gx1 - gx0, gy1 - gy0); c.strokeStyle = INK; c.lineWidth = 2; c.beginPath(); c.moveTo(gx0, gy0); c.lineTo(gx0, gy1); c.lineTo(gx1, gy1); c.stroke();
+    c.font = `500 22px ${MONO}`; c.fillStyle = MUT; c.textAlign = 'center';
+    [[10, '10'], [100, '100'], [1000, '1000'], [10000, '10 000']].forEach(([n, s]) => { const x = lx(n); line(x, gy1, x, gy1 + 8, INK, 2); line(x, gy0, x, gy1, 'rgba(28,36,64,.08)', 1); c.fillStyle = MUT; c.textAlign = 'center'; c.fillText(s, x, gy1 + 34); });
+    c.textAlign = 'right'; [2.6, 3, 3.4, 3.8].forEach((v) => { c.fillStyle = MUT; c.fillText(fmt(v, 1), gx0 - 12, ly(v) + 8); line(gx0 - 6, ly(v), gx0, ly(v), INK, 2); });
+    line(gx0, ly(PI), gx1, ly(PI), VER, 2.5, [9, 7]); rich('{v|_π_}', gx1 - 14, ly(PI) - 12, 38, { align: 'right' });
+    if (MC.hist.length > 1) { c.save(); c.beginPath(); c.rect(gx0, gy0, gx1 - gx0, gy1 - gy0); c.clip(); c.beginPath(); MC.hist.forEach(([n, v], i) => { const x = lx(n), y = ly(v); if (i) c.lineTo(x, y); else c.moveTo(x, y); }); c.strokeStyle = TEAL; c.lineWidth = 3; c.lineJoin = 'round'; c.stroke(); const last = MC.hist[MC.hist.length - 1]; c.restore(); dot(lx(last[0]), ly(last[1]), 7, TEAL, CARD); }
+  }
+
+  /* ═══════════ 8. Összefoglalás ═══════════ */
+  let spiral = null;
+  function sSummary(t) {
+    caption(8, 'Egy szám, két képlet');
+    const cx = 400, cy = 575, r = S.r8, rp = r * 26, intro = out(prog(t, 0, .9));
+    if (!spiral) { spiral = []; let th = 0; const b = 31 / TAU; for (let i = 0; i < 250 && i < PI_DIGITS.length; i++) { const rad = 288 + b * th; spiral.push({ ch: PI_DIGITS[i], th, rad }); th += 21.5 / rad; } }
+    // π számjegyei spirálban
+    c.save(); c.translate(cx, cy); c.rotate(-t * .025 - 1.2); c.font = `500 23px ${MONO}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    spiral.forEach((d, i) => {
+      const a = prog(t, .3 + i * .012, .9 + i * .012); if (a <= 0) return;
+      al(a * (i < 2 ? .95 : lerp(.5, .16, clamp(i / 60)))); c.fillStyle = i < 1 ? VER : INK;
+      c.save(); c.rotate(d.th); c.translate(0, -d.rad); c.fillText(d.ch, 0, 0); c.restore();
+    });
+    c.restore(); c.textBaseline = 'alphabetic';
+    // kör
+    const pop = outBack(prog(t, .1, 1));
+    c.save(); c.translate(cx, cy); c.scale(pop, pop); c.translate(-cx, -cy); al(intro);
+    shadow(true, 26, 12, .2); c.beginPath(); c.arc(cx, cy, rp, 0, TAU); c.fillStyle = '#d3ebe7'; c.fill(); shadow(false);
+    c.beginPath(); c.arc(cx, cy, rp, 0, TAU); c.strokeStyle = VER; c.lineWidth = 7; c.stroke();
+    const ha = -.5 + Math.sin(t * .35) * .35, hx = cx + Math.cos(ha) * rp, hy = cy + Math.sin(ha) * rp;
+    line(cx, cy, hx, hy, INK, 3.5); dot(cx, cy, 6, INK); dot(hx, hy, 9, VER, CARD);
+    const tq = (t * .1) % 1; dot(cx + Math.cos(tq * TAU) * rp, cy + Math.sin(tq * TAU) * rp, 6, CARD, VER);
+    c.restore();
+    al(intro); rich(`_r_ = \`${fmt(r, 1)}\` ~cm~`, cx, cy + Math.min(rp * .5, 90) + 30, 40, { align: 'center', pill: 'rgba(255,250,240,.86)' });
+    // képletek
+    const X = 850, e1 = prog(t, .8, 1.6), e2 = prog(t, 1.5, 2.3), e3 = prog(t, 2.4, 3.2);
+    al(e1); rich('~kerület~', X, 196 + (1 - out(e1)) * 20, 34, { color: MUT });
+    rich('{v|_K_} = 2_π_ _r_', X, 286 + (1 - out(e1)) * 20, 92);
+    rich(`= {v|\`${fmt(TAU * r, 2)}\` ~cm~}`, X + 4, 350 + (1 - out(e1)) * 20, 48);
+    al(e2); rich('~terület~', X, 476 + (1 - out(e2)) * 20, 34, { color: MUT });
+    rich('{t|_T_} = _π_ _r_^2^', X, 566 + (1 - out(e2)) * 20, 92);
+    rich(`= {t|\`${fmt(PI * r * r, 2)}\` ~cm²~}`, X + 4, 630 + (1 - out(e2)) * 20, 48);
+    al(e3); line(X, 716, 1318, 716, INK, 1.5);
+    rich('_π_ = `3,14159 26535 89793…`', X, 786, 46);
+    rich('~végtelen, sosem ismétlődő tizedes tört~', X, 834, 31, { color: MUT });
+    rich('~2× sugár  →  2× kerület,  4× terület~', X, 930, 34, { color: INK, weight: 620 });
+  }
+
+  /* ── fő rajzoló ── */
+  const SCENES = [[0, 0], [1, 1], [2, 2], [3, 4], [5, 5], [6, 6], [7, 7]];
+  function draw(L) {
+    c = L.ctx; LL = L; T[L.step] = L.st; GA = 1; bg(L);
+    SCENES.forEach(([a, b], i) => {
+      const d = L.sp < a ? a - L.sp : L.sp > b ? L.sp - b : 0, alpha = clamp(1 - 2.2 * d); if (alpha <= 0) return;
+      GA = alpha; c.save(); c.globalAlpha = alpha;
+      if (i === 0) sWheel(T[0]); else if (i === 1) sRatio(T[1]); else if (i === 2) sArch(T[2], L.step === 2);
+      else if (i === 3) sPizza(L); else if (i === 4) sOnion(T[5]); else if (i === 5) sMonte(T[6], L.step === 6); else sSummary(T[7]);
+      c.restore();
+    });
+    c.globalAlpha = 1;
+  }
+
+  Lesson.create({
+    subject: 'Matematika',
+    title: 'A kör területe — és hogyan kerül bele a π',
+    steps: [
+      { title: 'Mi az a <em>π</em>?',
+        text: '<p>Fessük be egy kerék peremét, és gurítsuk el <b>pontosan egy fordulattal</b>. A festék a kerületét rajzolja az útra.</p><p>Az átmérő háromszor ráfér a nyomra, és még marad egy kicsi: a kerület <span class="key">3,14159…-szer</span> akkora, mint az átmérő. Ez a szám a <span class="key">π</span>.</p>' },
+      { title: 'Minden körre ugyanaz',
+        text: '<p>Állítsd át a sugarat! A kör nő vagy zsugorodik, a kerülete vele együtt – a <b>kerület és az átmérő hányadosa</b> viszont meg sem moccan.</p><p class="big-fx">K = 2πr</p><p class="note">Hiszen K = π · d, az átmérő pedig d = 2r.</p>',
+        controls(L) { H.ratio = L.slider({ label: 'sugár (r)', min: 1, max: 5, step: .1, value: S.r2, format: (v) => fmt(v, 1) + ' cm', onInput: (v) => { S.r2 = v; } }); } },
+      { title: 'Arkhimédész harapófogója',
+        text: '<p>Hogyan számolható ki a π? Arkhimédész a kört <span class="key2">belülről</span> és <span class="key">kívülről</span> is sokszöggel fogta közre: a kör kerülete a két sokszög kerülete közé szorul.</p><p>Növeld az oldalak számát – a harapófogó egyre szorosabb!</p>',
+        enter() { S.aIdx = 0; S.aAuto = true; },
+        controls(L) {
+          H.arch = L.slider({ label: 'oldalak száma (n)', min: 0, max: AL.length - 1, step: 1, value: S.aIdx, format: (v) => AL[v], onInput: (v) => { S.aIdx = v; S.aAuto = false; } });
+          L.button('Duplázás ×2', () => { S.aAuto = false; const n2 = AL[S.aIdx] * 2; let i = AL.findIndex((x) => x >= n2); if (i < 0) i = AL.length - 1; S.aIdx = i; H.arch.set(i); });
+          L.button('Újra 6-tól', () => { S.aAuto = false; S.aIdx = 0; H.arch.set(0); });
+        } },
+      { title: 'A terület: szeleteljük fel!',
+        text: '<p>A kerületet már ismerjük. De mekkora a kör <b>területe</b>?</p><p>Vágjuk a kört egyforma cikkekre, mint egy pizzát, hajtsuk ki a két felét, majd toljuk őket egymásba.</p><p>Csak <b>átrendeztünk</b>: a terület közben semmit sem változott.</p>' },
+      { title: 'Sok szeletből téglalap',
+        text: '<p>Minél több a szelet, annál jobban kisimul a hullámos szél: az alakzat <b>téglalappá</b> válik.</p><p>Magassága a sugár: <span class="fx">r</span>. Alapja a kerület fele: <span class="fx">πr</span>.</p><p class="big-fx">T = πr · r = πr²</p>',
+        enter() { S.pIdx = 4; S.pAuto = true; S.pT = 0; },
+        controls(L) { H.pizza = L.slider({ label: 'szeletek száma (n)', min: 0, max: NL.length - 1, step: 1, value: S.pIdx, format: (v) => NL[v], onInput: (v) => { S.pIdx = v; S.pAuto = false; } }); } },
+      { title: 'Másik út: hagymakarikák',
+        text: '<p>Vágjuk a kört vékony gyűrűkre, és egyenesítsük ki mindet: a <em>ρ</em> sugarú gyűrűből <span class="fx">2πρ</span> hosszú csík lesz.</p><p>A csíkok <b>háromszöggé</b> állnak össze: alapja <span class="key">2πr</span>, magassága <span class="key2">r</span>.</p><p class="big-fx">T = ½ · 2πr · r = πr²</p>',
+        controls(L) { L.slider({ label: 'gyűrűk száma', min: 4, max: 60, step: 1, value: S.rings, format: (v) => v, onInput: (v) => { S.rings = v; } }); } },
+      { title: 'Hány <em>r²</em> fér a körbe?',
+        text: '<p>Az <span class="fx">r</span> oldalú négyzet területe <span class="fx">r²</span>. A köré írt nagy négyzetbe 4 ilyen fér, a körbe csak <span class="key">π ≈ 3,14</span>.</p><p>Dobáljunk véletlen pontokat a négyzetbe: a <span class="key2">körbe esők</span> aránya <span class="fx">π/4</span>-hez tart. A véletlenből is kijön a π!</p>',
+        enter() { mcReset(); },
+        controls(L) {
+          L.button('Dobj 1000 pontot', () => { MC.queue += 1000; });
+          L.button('Dobj 10 000-et', () => { MC.queue += 10000; });
+          L.button('Törlés', () => { mcReset(); });
+        } },
+      { title: 'Összefoglalás',
+        text: '<p>Egyetlen szám, a <span class="key">π</span> köti össze a kör adatait a sugarával.</p><ul><li><b>Kerület:</b> <span class="fx">K = 2πr</span></li><li><b>Terület:</b> <span class="fx">T = πr²</span></li></ul><p>Húzd a csúszkát! Kétszer akkora sugárhoz kétszer akkora kerület, de <b>négyszer</b> akkora terület tartozik.</p>',
+        controls(L) { L.slider({ label: 'sugár (r)', min: 1, max: 10, step: .5, value: S.r8, format: (v) => fmt(v, 1) + ' cm', onInput: (v) => { S.r8 = v; } }); } },
+    ],
+    init() { mcReset(); },
+    draw,
+  });
+})();
+</script>
+</body>
+</html>
