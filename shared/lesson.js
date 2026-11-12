@@ -86,6 +86,13 @@
       </div>
       <div class="lp-hint"><kbd>←</kbd> <kbd>→</kbd> léptetés · <kbd>R</kbd> újra · <kbd>F</kbd> teljes képernyő</div>`;
     stage.append(canvas, layer, panel); vp.append(stage); document.body.append(vp);
+    // álló telefonon: „fordítsd el” üzenet (elrejthető)
+    const rot = el('div'); rot.id = 'lesson-rotate';
+    rot.innerHTML = `<div class="lr-phone"><i></i></div><p class="lr-title">Fordítsd el a telefont!</p>
+      <p class="lr-sub">Ez a lecke fekvő képernyőre és kivetítőre készült – így látszik minden rendesen.</p>
+      <button class="lp-btn">Mégis így nézem</button><a class="lp-home" href="${cfg.home || 'index.html'}">← tantárgyak</a>`;
+    rot.querySelector('button').onclick = () => document.body.classList.add('lr-dismissed');
+    document.body.append(rot);
     panel.querySelector('.lp-subject').textContent = cfg.subject;
     panel.querySelector('.lp-lesson').textContent = cfg.title;
     const $count = panel.querySelector('.lp-count'), $title = panel.querySelector('.lp-title'),
